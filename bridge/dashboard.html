@@ -80,12 +80,13 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 <header>
 <h1>UDITA</h1>
 <label class="info" style="margin-right:4px">Device:</label>
-<select id="deviceSelect" onchange="selectDevice(this.value)" style="padding:3px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-size:.7rem;min-width:120px">
+<select id="deviceSelect" onchange="selectDevice(this.value)" style="padding:3px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-size:.7rem;min-width:140px" title="Select iPhone. Scan finds devices on your Wi‑Fi subnet.">
 <option value="">—</option>
 </select>
+<button class="b" style="padding:3px 8px;font-size:.65rem" onclick="scanNow()" title="Scan network for iPhones with WDA">Scan now</button>
 <span class="pill pill-on" id="wdaPill">WDA: ?</span>
 <span class="info" id="ipDisp">?</span>
-<input type="text" id="ipIn" placeholder="Add IP">
+<input type="text" id="ipIn" placeholder="Add IP manually">
 <button class="b" style="padding:3px 8px;font-size:.65rem" onclick="setIP()">Set</button>
 <button class="b" style="padding:3px 8px;font-size:.65rem" onclick="refreshStatus();loadDevices();">Refresh</button>
 <span class="info" id="scrSize">?</span>
@@ -171,6 +172,7 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 <div class="cb">
 <div class="row"><button class="b" onclick="api('POST','/api/press-button',{name:'home'})">Home</button><button class="b" onclick="api('POST','/api/press-button',{name:'volumeUp'})">Vol+</button><button class="b" onclick="api('POST','/api/press-button',{name:'volumeDown'})">Vol-</button><button class="b" onclick="api('POST','/api/lock')">Lock</button><button class="b" onclick="api('POST','/api/unlock')">Unlock</button></div>
 <div class="row"><button class="b" onclick="fire('GET','/api/battery')">Battery</button><button class="b" onclick="fire('GET','/api/device-info')">Info</button><button class="b" onclick="fire('GET','/api/active-app')">Active App</button><button class="b" onclick="fire('GET','/api/orientation')">Orientation</button><button class="b" onclick="fire('GET','/api/locked')">Locked?</button></div>
+<div class="row"><button class="bg" onclick="testMonitoring()">Test all monitoring</button><span class="hint" style="margin-left:6px">→ result in API box below</span></div>
 </div></div>
 
 <!-- Keyboard -->
@@ -250,6 +252,7 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 <div class="ar" onclick="fire('POST','/api/click',{name:'Safari'})"><span class="m">POST</span><code>/api/click</code></div>
 <div class="ar" onclick="fire('POST','/api/siri',{text:'what time is it'})"><span class="m">POST</span><code>/api/siri</code></div>
 </div>
+<div class="hint" style="margin-top:4px">Battery, Info, Active App, etc. show here:</div>
 <div class="apibox" id="arsp">Click endpoint or Send</div>
 </div></div>
 
@@ -263,16 +266,15 @@ function rs(ms){setTimeout(snap,ms||400);}
 
 function loadDevices(){
   fetch('/api/devices').then(r=>r.json()).then(d=>{
-    var sel=document.getElementById('deviceSelect'),cur=d.current||'';
+    var sel=document.getElementById('deviceSelect'),cur=d.current||'',devs=d.devices||[];
     sel.innerHTML='';
-    (d.devices||[]).forEach(function(dev){
-      var o=document.createElement('option');
-      o.value=dev.ip;o.textContent=dev.ip+' ('+dev.status+')';
-      if(dev.ip===cur)o.selected=true;
-      sel.appendChild(o);
-    });
-    if(!cur&&d.devices&&d.devices[0])sel.value=d.devices[0].ip;
+    if(!devs.length){var o=document.createElement('option');o.value='';o.textContent='No devices — Scan now or add IP';sel.appendChild(o);}
+    else{devs.forEach(function(dev){var o=document.createElement('option');o.value=dev.ip;o.textContent=dev.ip+' ('+dev.status+')';if(dev.ip===cur)o.selected=true;sel.appendChild(o);}); if(!cur&&devs[0])selectDevice(devs[0].ip);}
   }).catch(()=>{});
+}
+function scanNow(){
+  var sel=document.getElementById('deviceSelect');sel.innerHTML='';var o=document.createElement('option');o.value='';o.textContent='Scanning...';sel.appendChild(o);
+  fetch('/api/scan-now',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).then(function(){setTimeout(function(){loadDevices();refreshStatus();},4500);});
 }
 function selectDevice(ip){if(!ip)return;api('POST','/api/device/select',{ip:ip},function(){refreshStatus();loadDevices();snap();});}
 function refreshStatus(){
@@ -307,17 +309,17 @@ document.getElementById('autoScr').addEventListener('change',function(){
 snap();
 
 function scale(e){var r=cv.getBoundingClientRect();var cx=e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);var cy=e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientY:0);return{x:Math.round(Math.max(0,Math.min(W,(cx-r.left)/r.width*W))),y:Math.round(Math.max(0,Math.min(H,(cy-r.top)/r.height*H)))};}
-var dragStart=null,longPressTimer=null,isLongPress=false,rightClickPending=null,LONG_PRESS_MS=600,SWIPE_THRESH=15;
+var dragStart=null,longPressTimer=null,isLongPress=false,rightClickPending=null,LONG_PRESS_MS=500,SWIPE_THRESH=20;
 function dist(a,b){if(!b)return 0;var bx=b.x!=null?b.x:a.x,by=b.y!=null?b.y:a.y;return Math.hypot(bx-a.x,by-a.y);}
 function sendTap(x,y){api('POST','/api/tap',{x:x,y:y},function(){setEv('Tap ('+x+', '+y+')');addLog('tap','('+x+','+y+')');rs();});}
 function sendSwipe(f,t){api('POST','/api/swipe',{from:f,to:t,duration:0.4},function(){setEv('Swipe ('+f.x+','+f.y+')→('+t.x+','+t.y+')');addLog('swipe','screen');rs(500);});}
 function sendLongPress(x,y){api('POST','/api/long-press',{x:x,y:y,duration:1},function(){setEv('Long-press ('+x+', '+y+')');addLog('long-press','('+x+','+y+')');rs(800);});}
 function sendTwoFingerTap(x,y){api('POST','/api/two-finger-tap',{x:x,y:y},function(){setEv('2-finger ('+x+', '+y+')');addLog('2f','('+x+','+y+')');rs();});}
 function sendForceTouch(x,y){api('POST','/api/force-touch',{x:x,y:y,pressure:1,duration:0.5},function(){setEv('Force ('+x+', '+y+')');addLog('force','('+x+','+y+')');rs(600);});}
-function finishPointer(ep,f,t){if(!f)return;var d=dist(f,t||f);if(d>=SWIPE_THRESH){t=t||ep;sendSwipe(f,{x:ep.x,y:ep.y});}else if(isLongPress){sendLongPress(f.x,f.y);}else if(ep.ctrlKey){sendTwoFingerTap(f.x,f.y);}else if(ep.altKey){sendForceTouch(f.x,f.y);}else{sendTap(f.x,f.y);}}
+function finishPointer(ep,f,t){if(!f)return;var d=dist(f,ep);if(d>=SWIPE_THRESH){sendSwipe(f,{x:ep.x,y:ep.y});}else if(isLongPress){sendLongPress(f.x,f.y);}else if(ep.ctrlKey){sendTwoFingerTap(f.x,f.y);}else if(ep.altKey){sendForceTouch(f.x,f.y);}else{sendTap(f.x,f.y);}}
 cv.addEventListener('mousemove',function(e){if(!tpOn)return;var p=scale(e);curX=p.x;curY=p.y;document.getElementById('cx').value=p.x;document.getElementById('cy').value=p.y;document.getElementById('coords').textContent='('+p.x+', '+p.y+')';if(dragStart){dragStart.to={x:p.x,y:p.y};if(dist(dragStart.from,dragStart.to)>=SWIPE_THRESH&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}}draw();});
 cv.addEventListener('mousedown',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.button===2){rightClickPending={x:p.x,y:p.y};return;}isLongPress=false;if(longPressTimer)clearTimeout(longPressTimer);dragStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};longPressTimer=setTimeout(function(){isLongPress=true;longPressTimer=null;},LONG_PRESS_MS);});
-cv.addEventListener('mouseup',function(e){if(!tpOn)return;var p=scale(e);if(e.button===2){if(rightClickPending){sendLongPress(rightClickPending.x,rightClickPending.y);rightClickPending=null;}return;}if(!dragStart)return;if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}var f=dragStart.from,t=dragStart.to;finishPointer({x:p.x,y:p.y,ctrlKey:e.ctrlKey,altKey:e.altKey},f,t);dragStart=null;});
+cv.addEventListener('mouseup',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.button===2){if(rightClickPending){sendLongPress(rightClickPending.x,rightClickPending.y);rightClickPending=null;}return;}if(!dragStart)return;if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}var f=dragStart.from;finishPointer({x:p.x,y:p.y,ctrlKey:e.ctrlKey,altKey:e.altKey},f,dragStart.to);dragStart=null;});
 cv.addEventListener('mouseleave',function(){if(dragStart&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}dragStart=null;rightClickPending=null;});
 cv.addEventListener('contextmenu',function(e){if(rightClickPending){e.preventDefault();return false;}});
 cv.addEventListener('click',function(e){if(!tpOn)return;if(e.shiftKey){var p=scale(e);addLog('inspect','('+p.x+','+p.y+')');e.preventDefault();}});
@@ -326,7 +328,7 @@ cv.addEventListener('wheel',function(e){if(!tpOn)return;e.preventDefault();var p
 var touchStart=null,touchLongTimer=null,touchLongFired=false;
 cv.addEventListener('touchstart',function(e){if(!tpOn||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};touchLongFired=false;touchLongTimer=setTimeout(function(){touchLongFired=true;touchLongTimer=null;},LONG_PRESS_MS);},{passive:false});
 cv.addEventListener('touchmove',function(e){if(!touchStart||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart.to={x:p.x,y:p.y};if(dist(touchStart.from,touchStart.to)>=SWIPE_THRESH&&touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}},{passive:false});
-cv.addEventListener('touchend',function(e){if(!touchStart)return;if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}var p=e.changedTouches&&e.changedTouches[0]?scale(e.changedTouches[0]):touchStart.to;var f=touchStart.from,t=touchStart.to,d=dist(f,t);if(d>=SWIPE_THRESH){sendSwipe(f,{x:p.x,y:p.y});}else if(touchLongFired){sendLongPress(f.x,f.y);}else{sendTap(f.x,f.y);}touchStart=null;},{passive:false});
+cv.addEventListener('touchend',function(e){if(!touchStart)return;if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}var p=e.changedTouches&&e.changedTouches[0]?scale(e.changedTouches[0]):touchStart.to;var f=touchStart.from,d=dist(f,p);if(d>=SWIPE_THRESH){sendSwipe(f,{x:p.x,y:p.y});}else if(touchLongFired){sendLongPress(f.x,f.y);}else{sendTap(f.x,f.y);}touchStart=null;},{passive:false});
 cv.addEventListener('touchcancel',function(){if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}touchStart=null;});
 
 function setEv(m){document.getElementById('evs').textContent=m;}
@@ -382,6 +384,12 @@ function fire(m,p,b){
   var o=document.getElementById('arsp');o.textContent='Loading...';var t0=Date.now();
   fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined})
   .then(r=>r.json()).then(d=>{o.textContent=JSON.stringify(d,null,2);addLog('api',m+' '+p+' '+(Date.now()-t0)+'ms');}).catch(e=>{o.textContent='Error: '+e.message;});
+}
+function testMonitoring(){
+  var o=document.getElementById('arsp');o.textContent='Testing battery, device-info, active-app...';
+  Promise.all([fetch('/api/battery').then(r=>r.json()),fetch('/api/device-info').then(r=>r.json()),fetch('/api/active-app').then(r=>r.json())])
+  .then(function(arr){o.textContent=JSON.stringify({battery:arr[0],device_info:arr[1],active_app:arr[2]},null,2);addLog('api','Test monitoring OK');})
+  .catch(function(e){o.textContent='Error: '+e.message;});
 }
 function fireCustom(){var b=gv('apiB').trim(),body=null;if(b){try{body=JSON.parse(b);}catch(e){}}fire(gv('apiM'),gv('apiP'),body);}
 function addLog(t,m){

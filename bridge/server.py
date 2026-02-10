@@ -151,6 +151,15 @@ def _scanner_loop():
         except Exception as e:log.warning(f"Scan error: {e}")
         time.sleep(SCAN_INTERVAL)
 
+@app.route("/api/scan-now",methods=["POST"])
+def r_scan_now():
+    """Run one subnet scan in background; devices list updates in a few seconds."""
+    def _run():
+        try:_scan_subnet()
+        except Exception as e:log.warning(f"Scan-now error: {e}")
+    threading.Thread(target=_run,daemon=True).start()
+    return jsonify({"status":"ok","message":"Scan started; refresh devices in a few seconds"})
+
 @app.route("/api/devices")
 def r_devices():
     """List devices: scanned (continuous) + manual IPs. Click one to select."""
@@ -346,7 +355,41 @@ def r_set_rot():
 
 @app.route("/api/battery")
 def r_batt():
-    s=sid();return jsonify(w("GET",f"/session/{s}/wda/batteryInfo") if s else {})
+    """Battery info from WDA. level is 0.0–1.0 (UIDevice.batteryLevel); we add percentage 0–100."""
+    s=sid()
+    if not s:
+        return jsonify({"error":"no session"})
+    raw=w("GET",f"/session/{s}/wda/batteryInfo")
+    if not isinstance(raw,dict):
+        return jsonify(raw if raw else {})
+    if raw.get("error"):
+        return jsonify(raw)
+    # WDA returns {"sessionId":"...", "value": {"level": 0.0–1.0, "state": 1|2|3|4}}
+    inner=raw.get("value")
+    if inner is None:
+        inner=raw
+    level=inner.get("level") if isinstance(inner,dict) else None
+    try:
+        level_f=float(level)
+    except (TypeError,ValueError):
+        level_f=None
+    if level_f is not None:
+        pct=int(round(level_f*100 if level_f<=1 else level_f))
+        pct=min(100,max(0,pct))
+    else:
+        pct=None
+    # Build new response so percentage is always present when we have level
+    out={"sessionId":raw.get("sessionId")}
+    if isinstance(inner,dict):
+        out["value"]=dict(inner)
+        if pct is not None:
+            out["value"]["percentage"]=pct
+            out["percentage"]=pct
+    else:
+        out["value"]=inner
+        if pct is not None:
+            out["percentage"]=pct
+    return jsonify(out)
 
 @app.route("/api/device-info")
 def r_devinfo():

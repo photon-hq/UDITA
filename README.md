@@ -73,6 +73,8 @@ Then the bridge will use **127.0.0.1** as the device IP (set in dashboard or run
 
 **Option B — Wi‑Fi:** iPhone and Mac on the same Wi‑Fi. After running WDA via Xcode once over USB, you can sometimes reach it at the iPhone’s Wi‑Fi IP (e.g. in Settings → Wi‑Fi → (i) → IP Address). Use that IP in the dashboard. If it doesn’t work, use Option A.
 
+**When the iPhone is not plugged in (not charging):** Use its **Wi‑Fi IP** (e.g. 192.168.0.100) in the dashboard. **127.0.0.1** is only for the USB relay. If you see “Device not ready” or `MuxError` in the terminal, the relay has no USB device — switch to the device’s Wi‑Fi IP in the Device dropdown.
+
 ### 5. Run the bridge and open the dashboard
 
 ```bash
@@ -99,15 +101,22 @@ Set `DEVICES` before starting: `export DEVICES=127.0.0.1,192.168.0.108` or add e
 
 1. **Start:** From UDITA run `./run.sh`. Dependencies install if needed; USB relay starts automatically when possible.
 2. **Dashboard:** Open **http://localhost:5050** in a browser.
-3. **Device list:** The bridge scans the local subnet every 15s; the dropdown refreshes every 10s. Wi‑Fi devices appear automatically. For USB, use **127.0.0.1** (relay) or add it with **Set**.
+3. **Device list:** The bridge scans the local subnet every 15s; the dropdown refreshes every 10s. Wi‑Fi devices appear automatically. For USB, use **127.0.0.1** (relay) or add it with **Set**. When the iPhone is **not** plugged in, pick its **Wi‑Fi IP** (e.g. 192.168.0.100) to avoid “Device not ready” errors.
 4. **Select device:** Pick an IP from the **Device** dropdown. All actions (tap, swipe, screenshot, apps, etc.) apply to that device.
 5. **Add IP:** To use an IP not in the list (e.g. USB relay), type it and click **Set**.
 
 ### Using the dashboard
 
-- **Screen:** Click = tap, drag = swipe, hold ~0.6s = long-press, right-click = long-press, double-click = double-tap. Scroll wheel = scroll; Ctrl+wheel = pinch. Ctrl+click = two-finger tap, Alt+click = force touch.
+- **Screen:** Click = tap, drag = swipe, hold ~0.5s = long-press, right-click = long-press, double-click = double-tap. Scroll wheel = scroll; Ctrl+wheel = pinch. Ctrl+click = two-finger tap, Alt+click = force touch.
 - **Quick actions:** Home, swipe directions, Lock/Unlock, Notifications, Control Center, App Switcher, Spotlight. Use the cards for Call, Apps, Keyboard, etc.
+- **Battery and monitoring:** In the **Device** card, use **Battery**, **Info**, **Active App**, **Orientation**, **Locked?** — the result appears in the **Raw API** box (green box) below. Use **Test all monitoring** to run battery + device-info + active-app in one go.
+- **Multi-device:** Use **Scan now** in the header to force a network scan; the dropdown updates in a few seconds. Devices must be on the same Wi‑Fi subnet as the Mac and have WDA running. You can also add an IP manually and click **Set**.
 - **Logs:** Server events and your actions appear in the Logs card. Use Raw API to send custom requests.
+
+### Refresh vs restart
+
+- **Dashboard (HTML/JS) changes:** Just refresh the browser (F5 or Cmd+R). No need to restart the bridge.
+- **Server (Python) changes:** Stop the bridge (Ctrl+C) and run `./run.sh` again.
 
 ## Configuration
 
