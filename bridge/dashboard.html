@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UDITA</title>
+<style>
+:root{--bg:#09090b;--card:#111113;--card2:#18181b;--bdr:#27272a;--accent:#10b981;--blue:#3b82f6;--red:#ef4444;--orange:#f97316;--purple:#a855f7;--text:#e4e4e7;--dim:#71717a;--green:#22c55e;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--sans:system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:13px}
+::selection{background:var(--accent);color:#000}
+
+/* Header */
+header{background:#0f0f11;border-bottom:1px solid var(--bdr);padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+header h1{font-size:.95rem;font-weight:700;color:var(--accent);font-family:var(--mono);letter-spacing:-.02em}
+.pill{padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600;font-family:var(--mono)}
+.pill-on{background:#052e16;color:#4ade80;border:1px solid #166534}
+.pill-off{background:#2a0a0a;color:#f87171;border:1px solid #7f1d1d}
+header input{padding:3px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-family:var(--mono);font-size:.72rem;width:115px}
+header .info{color:var(--dim);font-size:.68rem;font-family:var(--mono)}
+
+/* Layout */
+.wrap{display:flex;min-height:calc(100vh - 40px)}
+.left{width:320px;min-width:320px;background:#0c0c0e;border-right:1px solid var(--bdr);display:flex;flex-direction:column}
+.right{flex:1;overflow-y:auto;padding:12px 16px}
+
+/* Mirror */
+.mirror{padding:10px;flex:1;display:flex;flex-direction:column;align-items:center}
+.mbar{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap;align-items:center;width:100%}
+.mbar label{font-size:.65rem;color:var(--dim);display:flex;align-items:center;gap:3px;font-family:var(--mono)}
+canvas{border:2px solid var(--bdr);border-radius:14px;cursor:crosshair;background:#000;transition:border-color .2s}
+canvas:hover{border-color:var(--accent)}
+.mcoords{font-size:.7rem;color:var(--dim);margin-top:4px;font-family:var(--mono)}
+.mstatus{font-size:.72rem;color:var(--accent);margin-top:2px;min-height:1.2em;font-family:var(--mono)}
+
+/* Quick bar */
+.qbar{display:flex;gap:3px;flex-wrap:wrap;margin-top:6px;justify-content:center}
+.qbar button{width:34px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1rem;padding:0}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--bdr);border-radius:10px;margin-bottom:8px;overflow:hidden;transition:border-color .2s}
+.card:hover{border-color:#3f3f46}
+.ch{padding:8px 14px;font-size:.75rem;font-weight:600;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;color:var(--text);transition:background .15s}
+.ch:hover{background:var(--card2)}
+.ch .ico{font-size:.85rem;margin-right:6px}
+.ch .arr{color:var(--dim);transition:transform .2s;font-size:.6rem}
+.cb{padding:10px 14px;display:none;border-top:1px solid var(--bdr)}
+.card.open .cb{display:block}
+.card.open .arr{transform:rotate(90deg)}
+
+/* Rows */
+.row{display:flex;flex-wrap:wrap;gap:5px;margin:4px 0;align-items:center}
+.row label{color:var(--dim);font-size:.7rem;min-width:24px;font-family:var(--mono)}
+input[type=number],input[type=text],select,textarea{padding:4px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-family:var(--mono);font-size:.72rem;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none}
+input[type=number]{width:52px}input[type=text]{width:180px}select{width:150px}
+textarea{width:100%;min-height:36px;resize:vertical}
+
+/* Buttons */
+button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:.72rem;font-family:var(--sans);transition:all .15s;display:inline-flex;align-items:center;gap:4px}
+.b{background:var(--card2);color:var(--text);border:1px solid var(--bdr)}.b:hover{background:#27272a;border-color:#3f3f46}
+.bg{background:var(--accent);color:#000}.bg:hover{background:#34d399}
+.bb{background:var(--blue);color:#fff}.bb:hover{background:#60a5fa}
+.br{background:var(--red);color:#fff}.br:hover{background:#f87171}
+.bo{background:var(--orange);color:#fff}.bo:hover{background:#fb923c}
+.bp{background:var(--purple);color:#fff}.bp:hover{background:#c084fc}
+.bbig{font-size:.88rem;padding:10px 22px;border-radius:10px}
+
+/* Logs */
+.logbox{max-height:180px;overflow-y:auto;background:#050506;border:1px solid #1a1a1e;border-radius:6px;padding:6px;font-size:.66rem;font-family:var(--mono);color:var(--dim);margin-top:4px}
+.logbox .le{padding:1px 0;border-bottom:1px solid #111}.le .ts{color:var(--blue)}.le .tp{color:var(--accent)}
+
+/* API */
+.apibox{background:#050506;border:1px solid #1a1a1e;border-radius:6px;padding:8px;font-size:.7rem;font-family:var(--mono);color:var(--green);max-height:220px;overflow-y:auto;white-space:pre-wrap;min-height:30px;margin-top:4px}
+.ar{padding:3px 8px;cursor:pointer;border-radius:4px;font-size:.66rem;font-family:var(--mono);color:var(--dim);display:flex;gap:6px;transition:background .1s}
+.ar:hover{background:#1a2a1a}.ar code{color:var(--green)}.ar .m{color:var(--accent);font-weight:700;min-width:36px}
+
+.sep{height:1px;background:var(--bdr);margin:8px 0}
+.hint{font-size:.62rem;color:#3f3f46;margin-top:2px;font-family:var(--mono)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+</style></head><body>
+
+<header>
+<h1>UDITA</h1>
+<label class="info" style="margin-right:4px">Device:</label>
+<select id="deviceSelect" onchange="selectDevice(this.value)" style="padding:3px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-size:.7rem;min-width:120px">
+<option value="">—</option>
+</select>
+<span class="pill pill-on" id="wdaPill">WDA: ?</span>
+<span class="info" id="ipDisp">?</span>
+<input type="text" id="ipIn" placeholder="Add IP">
+<button class="b" style="padding:3px 8px;font-size:.65rem" onclick="setIP()">Set</button>
+<button class="b" style="padding:3px 8px;font-size:.65rem" onclick="refreshStatus();loadDevices();">Refresh</button>
+<span class="info" id="scrSize">?</span>
+</header>
+
+<div class="wrap">
+<div class="left">
+<div class="mirror">
+<div class="mbar">
+<button class="bo" style="padding:2px 8px;font-size:.65rem" id="tpT" onclick="toggleTP()">Disable</button>
+<button class="bb" style="padding:2px 8px;font-size:.65rem" onclick="goHome()">Home</button>
+<button class="b" style="padding:2px 8px;font-size:.65rem" onclick="snap()">Snap</button>
+<label><input type="checkbox" id="autoScr"> Live</label>
+<label><input type="checkbox" id="showDot" checked> Dot</label>
+<span class="hint" style="margin-left:8px">Screen: click=tap · drag=swipe · hold=long-press · right=long-press · Ctrl+click=2-finger · Alt+click=force · wheel=scroll · Ctrl+wheel=pinch</span>
+</div>
+<canvas id="cv" width="294" height="636"></canvas>
+<div class="mcoords" id="coords">(0, 0)</div>
+<div class="mstatus" id="evs"></div>
+<div class="qbar">
+<button class="b" onclick="swD('up')" title="Swipe Up">↑</button>
+<button class="b" onclick="swD('down')" title="Swipe Down">↓</button>
+<button class="b" onclick="swD('left')" title="Swipe Left">←</button>
+<button class="b" onclick="swD('right')" title="Swipe Right">→</button>
+<button class="b" style="width:auto;font-size:.65rem" onclick="api('POST','/api/press-button',{name:'volumeUp'})">Vol+</button>
+<button class="b" style="width:auto;font-size:.65rem" onclick="api('POST','/api/press-button',{name:'volumeDown'})">Vol-</button>
+<button class="b" style="width:auto;font-size:.65rem" onclick="api('POST','/api/lock')">Lock</button>
+<button class="b" style="width:auto;font-size:.65rem" onclick="api('POST','/api/unlock')">Unlock</button>
+</div>
+</div>
+</div>
+
+<div class="right">
+
+<!-- Call -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">📞</span> Call Control</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="bg bbig" onclick="answerCall()">Answer Call</button><button class="br bbig" onclick="declineCall()">Decline</button><button class="bb" onclick="launchApp('com.apple.facetime')">FaceTime</button><button class="b" onclick="launchApp('com.apple.mobilephone')">Phone</button></div>
+</div></div>
+
+<!-- Automations -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">⚡</span> Quick Actions</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="grid2">
+<button class="bb" onclick="openNotifications()">Open Notifications</button>
+<button class="bb" onclick="openControlCenter()">Control Center</button>
+<button class="bb" onclick="openAppSwitcher()">App Switcher</button>
+<button class="bb" onclick="goHome()">Go Home</button>
+<button class="bp" onclick="takeScreenshotAndShow()">Screenshot + Show</button>
+<button class="bp" onclick="searchSpotlight()">Spotlight Search</button>
+<button class="b" onclick="api('POST','/api/appearance',{name:'dark'})">Dark Mode</button>
+<button class="b" onclick="api('POST','/api/appearance',{name:'light'})">Light Mode</button>
+</div>
+<div class="row" style="margin-top:6px"><input type="text" id="spotQ" placeholder="Search Spotlight..." style="width:200px"><button class="bg" onclick="spotlightType()">Search</button></div>
+</div></div>
+
+<!-- Touch -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">👆</span> Touch + Gestures</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><label>X:</label><input type="number" id="cx" value="195"><label>Y:</label><input type="number" id="cy" value="426">
+<button class="bg" onclick="tapXY()">Tap</button><button class="bb" onclick="dblXY()">2x</button><button class="bo" onclick="lpXY()">Long</button><button class="b" onclick="ftXY()">Force</button><button class="b" onclick="tftXY()">2-Finger</button></div>
+<div class="row"><label>Taps:</label><input type="number" id="ntaps" value="3" style="width:35px"><label>Fingers:</label><input type="number" id="ntouch" value="1" style="width:35px"><button class="b" onclick="multiTap()">Multi-Tap</button></div>
+<div class="row"><input type="text" id="elN" placeholder="Element name..."><button class="bg" onclick="clickEl()">Click by Name</button></div>
+</div></div>
+
+<!-- Swipe -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">🔄</span> Swipe / Scroll / Drag</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row">
+<button class="bb" style="font-size:.9rem" onclick="swD('up')">↑</button>
+<button class="bb" style="font-size:.9rem" onclick="swD('down')">↓</button>
+<button class="bb" style="font-size:.9rem" onclick="swD('left')">←</button>
+<button class="bb" style="font-size:.9rem" onclick="swD('right')">→</button>
+<select id="scrollDir"><option>up</option><option>down</option><option>left</option><option>right</option></select>
+<button class="b" onclick="scrollD()">Scroll</button>
+</div>
+<div class="row"><label>From:</label><input type="number" id="fx" value="195"><input type="number" id="fy" value="600"><label>To:</label><input type="number" id="tx" value="195"><input type="number" id="ty" value="200"><button class="bg" onclick="swC()">Swipe</button><button class="bo" onclick="dragC()">Drag</button></div>
+<div class="row"><button class="b" onclick="api('POST','/api/pinch',{x:+gv('cx'),y:+gv('cy'),scale:0.5,velocity:-2})">Pinch In</button><button class="b" onclick="api('POST','/api/pinch',{x:+gv('cx'),y:+gv('cy'),scale:2,velocity:2})">Pinch Out</button></div>
+</div></div>
+
+<!-- Device -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">📱</span> Device</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="b" onclick="api('POST','/api/press-button',{name:'home'})">Home</button><button class="b" onclick="api('POST','/api/press-button',{name:'volumeUp'})">Vol+</button><button class="b" onclick="api('POST','/api/press-button',{name:'volumeDown'})">Vol-</button><button class="b" onclick="api('POST','/api/lock')">Lock</button><button class="b" onclick="api('POST','/api/unlock')">Unlock</button></div>
+<div class="row"><button class="b" onclick="fire('GET','/api/battery')">Battery</button><button class="b" onclick="fire('GET','/api/device-info')">Info</button><button class="b" onclick="fire('GET','/api/active-app')">Active App</button><button class="b" onclick="fire('GET','/api/orientation')">Orientation</button><button class="b" onclick="fire('GET','/api/locked')">Locked?</button></div>
+</div></div>
+
+<!-- Keyboard -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">⌨️</span> Keyboard</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><input type="text" id="typeText" placeholder="Text..." style="width:220px"><button class="bg" onclick="typeT()">Type</button><button class="b" onclick="api('POST','/api/dismiss-keyboard')">Dismiss</button></div>
+</div></div>
+
+<!-- Alert -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">⚠️</span> Alert</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="b" onclick="fire('GET','/api/alert')">Get Text</button><button class="bg" onclick="api('POST','/api/alert/accept')">Accept</button><button class="br" onclick="api('POST','/api/alert/dismiss')">Dismiss</button><button class="b" onclick="fire('GET','/api/alert/buttons')">Buttons</button></div>
+</div></div>
+
+<!-- Apps -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">📦</span> Apps</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><input type="text" id="bid" value="com.apple.mobilesafari" style="width:200px"><button class="bg" onclick="launchApp()">Launch</button><button class="bb" onclick="api('POST','/api/activate',{bundle_id:gv('bid')})">Activate</button><button class="br" onclick="api('POST','/api/terminate',{bundle_id:gv('bid')})">Kill</button></div>
+<div class="row">
+<button class="b" onclick="launchApp('com.apple.mobilesafari')">Safari</button>
+<button class="b" onclick="launchApp('com.apple.Preferences')">Settings</button>
+<button class="b" onclick="launchApp('com.apple.facetime')">FaceTime</button>
+<button class="b" onclick="launchApp('com.apple.camera')">Camera</button>
+<button class="b" onclick="launchApp('com.apple.MobileSMS')">Messages</button>
+</div>
+<div class="row"><label>URL:</label><input type="text" id="openUrl" value="https://google.com" style="width:200px"><button class="bg" onclick="api('POST','/api/open-url',{url:gv('openUrl')})">Open</button></div>
+</div></div>
+
+<!-- Clipboard/Siri/Location -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">📋</span> Clipboard / Siri / Location</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="b" onclick="fire('POST','/api/clipboard/get',{contentType:'plaintext'})">Get Clipboard</button><input type="text" id="clipText" placeholder="Text..." style="width:150px"><button class="bg" onclick="api('POST','/api/clipboard/set',{content:btoa(gv('clipText')),contentType:'plaintext'})">Copy</button></div>
+<div class="sep"></div>
+<div class="row"><input type="text" id="siriText" placeholder="Hey Siri..." style="width:200px"><button class="bp" onclick="api('POST','/api/siri',{text:gv('siriText')})">Siri</button></div>
+<div class="sep"></div>
+<div class="row"><button class="b" onclick="fire('GET','/api/location')">Location</button><label>Lat:</label><input type="text" id="lat" value="37.77" style="width:65px"><label>Lon:</label><input type="text" id="lon" value="-122.4" style="width:65px"><button class="bg" onclick="api('POST','/api/simulated-location',{latitude:+gv('lat'),longitude:+gv('lon')})">Set</button><button class="br" onclick="api('DELETE','/api/simulated-location')">Clear</button></div>
+</div></div>
+
+<!-- Elements -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">🔍</span> Elements</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="bg" onclick="fire('GET','/api/elements')">List All</button><button class="b" onclick="fire('GET','/api/active-element')">Active</button><button class="b" onclick="fire('GET','/api/source')">XML Source</button></div>
+<div class="row"><label>By:</label><select id="findBy"><option value="name">name</option><option value="class name">class</option><option value="accessibility id">accessibility id</option><option value="xpath">xpath</option><option value="predicate string">predicate</option><option value="class chain">class chain</option></select><input type="text" id="findVal" placeholder="value" style="width:140px"><button class="bg" onclick="fire('POST','/api/find',{using:gv('findBy'),value:gv('findVal')})">Find</button></div>
+</div></div>
+
+<!-- Video / Auth / Config -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">🎬</span> Video / Auth / Config</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="bg" onclick="api('POST','/api/video/start')">Record</button><button class="br" onclick="api('POST','/api/video/stop')">Stop</button><button class="b" onclick="fire('GET','/api/video')">Get</button></div>
+<div class="sep"></div>
+<div class="row"><button class="bg" onclick="api('POST','/api/touch-id',{match:true})">Touch ID OK</button><button class="br" onclick="api('POST','/api/touch-id',{match:false})">Touch ID Fail</button></div>
+<div class="sep"></div>
+<div class="row"><button class="b" onclick="fire('GET','/api/settings')">Settings</button><button class="b" onclick="fire('GET','/api/healthcheck')">Health</button></div>
+</div></div>
+
+<!-- Logs -->
+<div class="card open"><div class="ch" onclick="tc(this)"><span><span class="ico">📝</span> Logs <span style="color:var(--dim);font-size:.6rem;margin-left:4px" id="lc">0</span></span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><button class="b" onclick="fire('GET','/api/events')">Server Logs</button><button class="b" onclick="clearLogs()">Clear</button></div>
+<div class="logbox" id="la"></div>
+</div></div>
+
+<!-- Raw API -->
+<div class="card"><div class="ch" onclick="tc(this)"><span><span class="ico">🔧</span> Raw API</span><span class="arr">▸</span></div>
+<div class="cb">
+<div class="row"><select id="apiM"><option>GET</option><option selected>POST</option><option>DELETE</option></select><input type="text" id="apiP" value="/api/status" style="width:200px"><button class="bg" onclick="fireCustom()">Send</button></div>
+<div class="row"><textarea id="apiB" placeholder='{"key":"value"}'></textarea></div>
+<div style="max-height:120px;overflow-y:auto;margin-top:4px">
+<div class="ar" onclick="fire('GET','/api/status')"><span class="m">GET</span><code>/api/status</code></div>
+<div class="ar" onclick="fire('GET','/api/elements')"><span class="m">GET</span><code>/api/elements</code></div>
+<div class="ar" onclick="fire('GET','/api/device-info')"><span class="m">GET</span><code>/api/device-info</code></div>
+<div class="ar" onclick="fire('GET','/api/battery')"><span class="m">GET</span><code>/api/battery</code></div>
+<div class="ar" onclick="fire('POST','/api/tap',{x:195,y:426})"><span class="m">POST</span><code>/api/tap</code></div>
+<div class="ar" onclick="fire('POST','/api/swipe',{from:{x:195,y:600},to:{x:195,y:200}})"><span class="m">POST</span><code>/api/swipe</code></div>
+<div class="ar" onclick="fire('POST','/api/home')"><span class="m">POST</span><code>/api/home</code></div>
+<div class="ar" onclick="fire('POST','/api/launch',{bundle_id:'com.apple.mobilesafari'})"><span class="m">POST</span><code>/api/launch</code></div>
+<div class="ar" onclick="fire('POST','/api/click',{name:'Safari'})"><span class="m">POST</span><code>/api/click</code></div>
+<div class="ar" onclick="fire('POST','/api/siri',{text:'what time is it'})"><span class="m">POST</span><code>/api/siri</code></div>
+</div>
+<div class="apibox" id="arsp">Click endpoint or Send</div>
+</div></div>
+
+</div></div>
+
+<script>
+var W=393,H=852,tpOn=true,logs=[],curX=0,curY=0,scrImg=null,streaming=false;
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+function gv(id){return document.getElementById(id).value;}
+function rs(ms){setTimeout(snap,ms||400);}
+
+function loadDevices(){
+  fetch('/api/devices').then(r=>r.json()).then(d=>{
+    var sel=document.getElementById('deviceSelect'),cur=d.current||'';
+    sel.innerHTML='';
+    (d.devices||[]).forEach(function(dev){
+      var o=document.createElement('option');
+      o.value=dev.ip;o.textContent=dev.ip+' ('+dev.status+')';
+      if(dev.ip===cur)o.selected=true;
+      sel.appendChild(o);
+    });
+    if(!cur&&d.devices&&d.devices[0])sel.value=d.devices[0].ip;
+  }).catch(()=>{});
+}
+function selectDevice(ip){if(!ip)return;api('POST','/api/device/select',{ip:ip},function(){refreshStatus();loadDevices();snap();});}
+function refreshStatus(){
+  fetch('/api/status').then(r=>r.json()).then(d=>{
+    var p=document.getElementById('wdaPill');
+    p.textContent='WDA: '+d.wda;p.className='pill '+(d.wda==='connected'?'pill-on':'pill-off');
+    document.getElementById('ipDisp').textContent=d.iphone_ip;
+    document.getElementById('ipIn').value=d.iphone_ip;
+    W=d.screen.width;H=d.screen.height;
+    document.getElementById('scrSize').textContent=W+'×'+H;
+    cv.width=294;cv.height=Math.round(H*294/W);
+    var sel=document.getElementById('deviceSelect');if(sel.value!==d.iphone_ip)sel.value=d.iphone_ip;
+  }).catch(()=>{});
+}
+refreshStatus();
+loadDevices();
+setInterval(loadDevices,10000);  // refresh device list every 10s (continuous scan)
+
+function snap(){var i=new Image();i.onload=function(){scrImg=i;draw();};i.src='/api/screenshot.png?t='+Date.now();}
+function draw(){
+  if(!scrImg)return;ctx.drawImage(scrImg,0,0,cv.width,cv.height);
+  if(document.getElementById('showDot').checked){
+    var s=cv.width/W;
+    ctx.beginPath();ctx.arc(curX*s,curY*s,7,0,Math.PI*2);
+    ctx.fillStyle='rgba(239,68,68,0.9)';ctx.fill();
+    ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+  }
+}
+document.getElementById('autoScr').addEventListener('change',function(){
+  if(this.checked){streaming=true;(function t(){if(!streaming)return;snap();setTimeout(t,1800);}());}else streaming=false;
+});
+snap();
+
+function scale(e){var r=cv.getBoundingClientRect();var cx=e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);var cy=e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientY:0);return{x:Math.round(Math.max(0,Math.min(W,(cx-r.left)/r.width*W))),y:Math.round(Math.max(0,Math.min(H,(cy-r.top)/r.height*H)))};}
+var dragStart=null,longPressTimer=null,isLongPress=false,rightClickPending=null,LONG_PRESS_MS=600,SWIPE_THRESH=15;
+function dist(a,b){if(!b)return 0;var bx=b.x!=null?b.x:a.x,by=b.y!=null?b.y:a.y;return Math.hypot(bx-a.x,by-a.y);}
+function sendTap(x,y){api('POST','/api/tap',{x:x,y:y},function(){setEv('Tap ('+x+', '+y+')');addLog('tap','('+x+','+y+')');rs();});}
+function sendSwipe(f,t){api('POST','/api/swipe',{from:f,to:t,duration:0.4},function(){setEv('Swipe ('+f.x+','+f.y+')→('+t.x+','+t.y+')');addLog('swipe','screen');rs(500);});}
+function sendLongPress(x,y){api('POST','/api/long-press',{x:x,y:y,duration:1},function(){setEv('Long-press ('+x+', '+y+')');addLog('long-press','('+x+','+y+')');rs(800);});}
+function sendTwoFingerTap(x,y){api('POST','/api/two-finger-tap',{x:x,y:y},function(){setEv('2-finger ('+x+', '+y+')');addLog('2f','('+x+','+y+')');rs();});}
+function sendForceTouch(x,y){api('POST','/api/force-touch',{x:x,y:y,pressure:1,duration:0.5},function(){setEv('Force ('+x+', '+y+')');addLog('force','('+x+','+y+')');rs(600);});}
+function finishPointer(ep,f,t){if(!f)return;var d=dist(f,t||f);if(d>=SWIPE_THRESH){t=t||ep;sendSwipe(f,{x:ep.x,y:ep.y});}else if(isLongPress){sendLongPress(f.x,f.y);}else if(ep.ctrlKey){sendTwoFingerTap(f.x,f.y);}else if(ep.altKey){sendForceTouch(f.x,f.y);}else{sendTap(f.x,f.y);}}
+cv.addEventListener('mousemove',function(e){if(!tpOn)return;var p=scale(e);curX=p.x;curY=p.y;document.getElementById('cx').value=p.x;document.getElementById('cy').value=p.y;document.getElementById('coords').textContent='('+p.x+', '+p.y+')';if(dragStart){dragStart.to={x:p.x,y:p.y};if(dist(dragStart.from,dragStart.to)>=SWIPE_THRESH&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}}draw();});
+cv.addEventListener('mousedown',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.button===2){rightClickPending={x:p.x,y:p.y};return;}isLongPress=false;if(longPressTimer)clearTimeout(longPressTimer);dragStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};longPressTimer=setTimeout(function(){isLongPress=true;longPressTimer=null;},LONG_PRESS_MS);});
+cv.addEventListener('mouseup',function(e){if(!tpOn)return;var p=scale(e);if(e.button===2){if(rightClickPending){sendLongPress(rightClickPending.x,rightClickPending.y);rightClickPending=null;}return;}if(!dragStart)return;if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}var f=dragStart.from,t=dragStart.to;finishPointer({x:p.x,y:p.y,ctrlKey:e.ctrlKey,altKey:e.altKey},f,t);dragStart=null;});
+cv.addEventListener('mouseleave',function(){if(dragStart&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}dragStart=null;rightClickPending=null;});
+cv.addEventListener('contextmenu',function(e){if(rightClickPending){e.preventDefault();return false;}});
+cv.addEventListener('click',function(e){if(!tpOn)return;if(e.shiftKey){var p=scale(e);addLog('inspect','('+p.x+','+p.y+')');e.preventDefault();}});
+cv.addEventListener('dblclick',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);api('POST','/api/double-tap',{x:p.x,y:p.y},function(){setEv('2x ('+p.x+', '+p.y+')');addLog('2x','('+p.x+','+p.y+')');rs();});});
+cv.addEventListener('wheel',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.ctrlKey||e.metaKey){var scl=(e.deltaY>0?0.85:1.15);api('POST','/api/pinch',{x:p.x,y:p.y,scale:scl},function(){setEv('Pinch '+(scl>1?'out':'in'));addLog('pinch',scl);rs(400);});}else{var dir=e.deltaY>0?'down':e.deltaY<0?'up':e.deltaX>0?'right':e.deltaX<0?'left':null;if(dir)api('POST','/api/scroll',{direction:dir},function(){setEv('Scroll '+dir);addLog('scroll',dir);rs(400);});}},{passive:false});
+var touchStart=null,touchLongTimer=null,touchLongFired=false;
+cv.addEventListener('touchstart',function(e){if(!tpOn||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};touchLongFired=false;touchLongTimer=setTimeout(function(){touchLongFired=true;touchLongTimer=null;},LONG_PRESS_MS);},{passive:false});
+cv.addEventListener('touchmove',function(e){if(!touchStart||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart.to={x:p.x,y:p.y};if(dist(touchStart.from,touchStart.to)>=SWIPE_THRESH&&touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}},{passive:false});
+cv.addEventListener('touchend',function(e){if(!touchStart)return;if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}var p=e.changedTouches&&e.changedTouches[0]?scale(e.changedTouches[0]):touchStart.to;var f=touchStart.from,t=touchStart.to,d=dist(f,t);if(d>=SWIPE_THRESH){sendSwipe(f,{x:p.x,y:p.y});}else if(touchLongFired){sendLongPress(f.x,f.y);}else{sendTap(f.x,f.y);}touchStart=null;},{passive:false});
+cv.addEventListener('touchcancel',function(){if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}touchStart=null;});
+
+function setEv(m){document.getElementById('evs').textContent=m;}
+function toggleTP(){tpOn=!tpOn;document.getElementById('tpT').textContent=tpOn?'Disable':'Enable';cv.style.opacity=tpOn?1:.3;}
+function tc(h){h.parentElement.classList.toggle('open');}
+function setIP(){api('POST','/api/set-ip',{ip:gv('ipIn')},function(){refreshStatus();loadDevices();});}
+function goHome(){api('POST','/api/home',{},function(){setEv('Home');addLog('home','');rs(500);});}
+
+// Touch
+function tapXY(){var x=+gv('cx'),y=+gv('cy');api('POST','/api/tap',{x:x,y:y},function(){setEv('Tap');addLog('tap','('+x+','+y+')');rs();});}
+function dblXY(){var x=+gv('cx'),y=+gv('cy');api('POST','/api/double-tap',{x:x,y:y},function(){addLog('2x','('+x+','+y+')');rs();});}
+function lpXY(){var x=+gv('cx'),y=+gv('cy');api('POST','/api/long-press',{x:x,y:y,duration:1.5},function(){addLog('long','('+x+','+y+')');rs(1800);});}
+function ftXY(){var x=+gv('cx'),y=+gv('cy');api('POST','/api/force-touch',{x:x,y:y,pressure:1,duration:1},function(){addLog('force','('+x+','+y+')');rs(1200);});}
+function tftXY(){var x=+gv('cx'),y=+gv('cy');api('POST','/api/two-finger-tap',{x:x,y:y},function(){addLog('2f','('+x+','+y+')');rs();});}
+function multiTap(){api('POST','/api/multi-tap',{x:+gv('cx'),y:+gv('cy'),taps:+gv('ntaps'),touches:+gv('ntouch')},function(){addLog('multi','');rs();});}
+function clickEl(){api('POST','/api/click',{name:gv('elN')},function(d){setEv('Click: '+gv('elN'));addLog('click',gv('elN'));rs(500);});}
+function typeT(){api('POST','/api/type',{text:gv('typeText')},function(){addLog('type',gv('typeText'));});}
+function launchApp(b){b=b||gv('bid');api('POST','/api/launch',{bundle_id:b},function(){setEv('Launch: '+b);addLog('launch',b);rs(1000);});}
+
+// Swipe
+function swD(d){
+  var cx=W/2,cy=H/2,dist=200,f={x:cx,y:cy},t={x:cx,y:cy};
+  if(d==='up'){f.y=cy+dist;t.y=cy-dist;}else if(d==='down'){f.y=cy-dist;t.y=cy+dist;}
+  else if(d==='left'){f.x=cx+dist;t.x=cx-dist;}else if(d==='right'){f.x=cx-dist;t.x=cx+dist;}
+  document.getElementById('fx').value=Math.round(f.x);document.getElementById('fy').value=Math.round(f.y);
+  document.getElementById('tx').value=Math.round(t.x);document.getElementById('ty').value=Math.round(t.y);
+  api('POST','/api/swipe',{from:f,to:t,duration:0.5},function(){setEv('Swipe '+d);addLog('swipe',d);rs(600);});
+}
+function swC(){api('POST','/api/swipe',{from:{x:+gv('fx'),y:+gv('fy')},to:{x:+gv('tx'),y:+gv('ty')},duration:0.5},function(){addLog('swipe','custom');rs(600);});}
+function dragC(){api('POST','/api/drag',{fromX:+gv('fx'),fromY:+gv('fy'),toX:+gv('tx'),toY:+gv('ty'),duration:1},function(){addLog('drag','');rs(1200);});}
+function scrollD(){api('POST','/api/scroll',{direction:gv('scrollDir')},function(){addLog('scroll',gv('scrollDir'));rs(600);});}
+
+// Combos / Quick Actions
+function answerCall(){api('POST','/api/answer-call',{},function(d){setEv('Answer: '+(d.element||d.status));addLog('call','answer');rs(1000);});}
+function declineCall(){api('POST','/api/decline-call',{},function(d){setEv('Decline: '+(d.element||d.status));addLog('call','decline');rs(1000);});}
+function openNotifications(){api('POST','/api/swipe',{from:{x:W/2,y:5},to:{x:W/2,y:H/2},duration:0.3},function(){setEv('Notifications');addLog('combo','notifications');rs(600);});}
+function openControlCenter(){api('POST','/api/swipe',{from:{x:W-20,y:5},to:{x:W-20,y:H/2},duration:0.3},function(){setEv('Control Center');addLog('combo','control center');rs(600);});}
+function openAppSwitcher(){api('POST','/api/swipe',{from:{x:W/2,y:H-5},to:{x:W/2,y:H/2},duration:0.15},function(){setEv('App Switcher');addLog('combo','app switcher');rs(800);});}
+function takeScreenshotAndShow(){snap();setEv('Screenshot taken');addLog('combo','screenshot');}
+function searchSpotlight(){
+  api('POST','/api/swipe',{from:{x:W/2,y:H/2},to:{x:W/2,y:H/2+150},duration:0.3},function(){
+    setTimeout(function(){
+      var q=gv('spotQ');
+      if(q)api('POST','/api/type',{text:q},function(){addLog('combo','spotlight: '+q);rs(800);});
+      else{addLog('combo','spotlight opened');rs(600);}
+    },800);
+  });
+}
+function spotlightType(){searchSpotlight();}
+
+function api(m,p,b,cb){fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined}).then(r=>r.json()).then(d=>{if(cb)cb(d);}).catch(e=>{addLog('err',p+' '+e.message);});}
+function fire(m,p,b){
+  var o=document.getElementById('arsp');o.textContent='Loading...';var t0=Date.now();
+  fetch(p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined})
+  .then(r=>r.json()).then(d=>{o.textContent=JSON.stringify(d,null,2);addLog('api',m+' '+p+' '+(Date.now()-t0)+'ms');}).catch(e=>{o.textContent='Error: '+e.message;});
+}
+function fireCustom(){var b=gv('apiB').trim(),body=null;if(b){try{body=JSON.parse(b);}catch(e){}}fire(gv('apiM'),gv('apiP'),body);}
+function addLog(t,m){
+  var n=new Date().toLocaleTimeString();logs.push({t:n,type:t,msg:m});if(logs.length>500)logs.shift();
+  var a=document.getElementById('la');
+  a.innerHTML+='<div class="le"><span class="ts">['+n+']</span> <span class="tp">'+t+'</span> '+m+'</div>';
+  a.scrollTop=a.scrollHeight;document.getElementById('lc').textContent=logs.length;
+}
+function clearLogs(){logs=[];document.getElementById('la').innerHTML='';document.getElementById('lc').textContent='0';api('POST','/api/events/clear');}
+addLog('init','Dashboard loaded');
+</script></body></html>
