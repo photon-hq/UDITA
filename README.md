@@ -1,170 +1,566 @@
-# UDITA
+<div align="center">
+  <img src="logo.png" alt="UDITA Logo" width="120" height="120">
+  
+  # UDITA
+  
+  **Unified Device Interface To Automate**
+  
+  *Control one or more iPhones from a single web dashboard*
+  
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  
+</div>
 
-*Unified Device Interface To Automate — named after my girlfriend.*
+---
 
-One dashboard to control one or more iPhones. Install and run **WebDriverAgent (WDA)** on each device; the bridge discovers them and you pick one to control (tap, swipe, screenshots, apps, calls, etc.).
+## Quick Start
 
-## What it is
+### Prerequisites
+- Mac with Xcode installed
+- iPhone connected via USB
+- Python 3 installed
 
-- **Single entrypoint:** Dashboard shows all iPhones on your list (reachable or not). Select one to control it.
-- **One app per iPhone:** WebDriverAgent (WDA) only. Build from `wda/`, run on each device.
-- **Mac bridge:** Python server in `bridge/` talks to WDA on each iPhone (HTTP :8100).
-
-## Run (single entry point)
-
-From the UDITA folder:
+### Setup
 
 ```bash
-cd /path/to/facetime/UDITA
+# 1. Clone and enter directory
+cd UDITA
+
+# 2. Run setup (installs dependencies)
+./setup.sh
+
+# 3. Configure signing in Xcode
+open wda/WebDriverAgent.xcodeproj
+# → Select WebDriverAgentRunner target
+# → Signing & Capabilities → Choose your Team
+# → Change Bundle ID to something unique (e.g., com.yourname.WebDriverAgentRunner)
+# → Repeat for WebDriverAgentLib target
+
+# 4. Connect iPhone, unlock, trust computer, then:
+./install-wda.sh
+
+# 5. Start the bridge
 ./run.sh
 ```
 
-This installs dependencies if needed, starts the USB relay automatically when possible, and starts the bridge. Open **http://localhost:5050** and pick a device.
+Open **http://localhost:5050** in your browser and select your device.
 
-**First time only:**  
-1. Set signing in Xcode: `open wda/WebDriverAgent.xcodeproj` → both targets → Signing & Capabilities → your Team, unique Bundle ID.  
-2. Connect iPhone (USB), unlock and trust, then: `./install-wda.sh`
+---
 
-## Setup (from scratch, step by step)
+## What is UDITA?
 
-Use any Mac and iPhone. Same Wi‑Fi or USB.
+UDITA provides a web dashboard to remotely control iPhones using WebDriverAgent (WDA). 
 
-### 1. Mac — prerequisites
+**Features:**
+- Interactive screen mirror - Click to tap, drag to swipe, right-click for long-press
+- Multi-device support - Control multiple iPhones from one dashboard
+- Auto-discovery - Automatically finds iPhones on your network
+- Call control - Answer/decline FaceTime and phone calls
+- Screenshots - Capture and view device screen
+- Quick actions - Home, lock, notifications, control center, app switcher
+- Element inspection - Find and interact with UI elements
+- Full WDA API - Access all WebDriverAgent endpoints
 
-- **Xcode** (from App Store)
-- **Python 3** (system or Homebrew)
-- **pip**: `python3 -m pip --version`
+**How it works:**
+```
+┌─────────────┐         ┌──────────────┐         ┌─────────────┐
+│   Browser   │◄───────►│  Mac Bridge  │◄───────►│   iPhone    │
+│ localhost:  │  HTTP   │   (Python)   │  USB/   │  WDA:8100   │
+│    5050     │         │              │  WiFi   │             │
+└─────────────┘         └──────────────┘         └─────────────┘
+```
 
-### 2. Mac — install bridge deps
+---
+
+## Usage
+
+### Starting UDITA
 
 ```bash
-cd /path/to/facetime/UDITA
+./run.sh
+```
+
+This will:
+- Install dependencies (if needed)
+- Start USB relay (if device connected)
+- Start the bridge server
+- Scan network for devices
+
+Then open **http://localhost:5050**
+
+### Using the Dashboard
+
+**Screen Interaction:**
+- **Click** = Tap
+- **Drag** = Swipe
+- **Hold 0.5s** = Long press
+- **Right-click** = Long press
+- **Double-click** = Double tap
+- **Scroll wheel** = Scroll
+- **Ctrl+wheel** = Pinch zoom
+- **Ctrl+click** = Two-finger tap
+- **Alt+click** = Force touch
+
+**Quick Actions:**
+- Home button, lock/unlock, volume controls
+- Open notifications, control center, app switcher
+- Launch apps (Safari, Settings, FaceTime, etc.)
+- Answer/decline calls
+- Type text, dismiss keyboard
+- Take screenshots
+
+**Device Selection:**
+- Devices appear automatically (scanned every 15s)
+- Click **Scan now** to force refresh
+- Use **Set** button to add device manually
+- For USB: use `127.0.0.1` (relay)
+- For WiFi: use device's IP (e.g., `192.168.0.100`)
+
+---
+
+## Detailed Setup
+
+<details>
+<summary><b>Prerequisites</b></summary>
+
+### Mac Requirements
+- **macOS** (any recent version)
+- **Xcode** (from App Store) - Required for building WDA
+- **Python 3** - Usually pre-installed, or: `brew install python3`
+- **pip** - Check with: `python3 -m pip --version`
+
+### iPhone Requirements
+- **Any iPhone** (iOS 9.3+)
+- **USB cable** (for initial setup)
+- **Same WiFi network** as Mac (optional, for wireless control)
+- **Developer mode enabled** (iOS 16+)
+
+### Optional Tools
+- **tidevice** - For USB relay: `pip3 install tidevice`
+- **pymobiledevice3** - For advanced features: `pip3 install pymobiledevice3`
+- **libimobiledevice** - Alternative USB relay: `brew install libimobiledevice`
+
+</details>
+
+<details>
+<summary><b>Installation Steps</b></summary>
+
+### Step 1: Install Bridge Dependencies
+
+```bash
+cd UDITA
 pip3 install -r bridge/requirements.txt
 ```
 
-Optional (for app launch when iPhone is not on USB): `pip3 install pymobiledevice3`
+Or use the setup script:
+```bash
+./setup.sh
+```
 
-### 3. iPhone — build and run WDA
+### Step 2: Configure WDA Signing
 
-- Connect iPhone to Mac via USB. Unlock the device, trust the computer.
-- Open the WDA project in Xcode:
-  ```bash
-  open wda/WebDriverAgent.xcodeproj
-  ```
-- In Xcode:
-  - Select project **WebDriverAgent** → target **WebDriverAgentRunner** → **Signing & Capabilities** → enable **Automatically manage signing**, choose your **Team**, set a unique **Bundle ID** (e.g. `com.yourname.WebDriverAgentRunner`).
-  - Do the same for target **WebDriverAgentLib** (same team, auto-signing).
-  - In the toolbar, select your **iPhone** (not a simulator).
-  - **Product → Test** (Cmd+U). WDA installs and runs on the iPhone; it listens on port 8100 on the device.
+WebDriverAgent must be signed with **your** Apple ID:
 
-### 4. Expose WDA to the Mac
+1. Open the project:
+   ```bash
+   open wda/WebDriverAgent.xcodeproj
+   ```
 
-**Option A — USB (one device):** Forward the device port to the Mac:
+2. Select **WebDriverAgentRunner** target
+3. Go to **Signing & Capabilities** tab
+4. Enable **Automatically manage signing**
+5. Select your **Team** (your Apple ID)
+6. Change **Bundle Identifier** to something unique:
+   - Example: `com.yourname.WebDriverAgentRunner`
+
+7. **Repeat for WebDriverAgentLib target** (same team, same bundle ID pattern)
+
+### Step 3: Install WDA on iPhone
+
+1. Connect iPhone via USB
+2. Unlock device and tap **Trust** when prompted
+3. Run the installer:
+   ```bash
+   ./install-wda.sh
+   ```
+
+This builds and runs WDA on your iPhone. First time may prompt for Apple ID password.
+
+### Step 4: Start the Bridge
 
 ```bash
-# If you have tidevice:
-tidevice relay 8100 8100
+./run.sh
+```
 
+The bridge will:
+- Start USB relay automatically (if device connected)
+- Start Flask server on port 5050
+- Begin scanning network for devices
+
+</details>
+
+<details>
+<summary><b>Network Configuration</b></summary>
+
+### USB Connection (Recommended for single device)
+
+When iPhone is connected via USB, use the relay:
+
+```bash
+# Relay is started automatically by ./run.sh
+# Or start manually:
+tidevice relay 8100 8100
 # Or with libimobiledevice:
 iproxy 8100 8100
 ```
 
-Then the bridge will use **127.0.0.1** as the device IP (set in dashboard or run `./start.sh 127.0.0.1`).
+Then use **127.0.0.1** as the device IP in the dashboard.
 
-**Option B — Wi‑Fi:** iPhone and Mac on the same Wi‑Fi. After running WDA via Xcode once over USB, you can sometimes reach it at the iPhone’s Wi‑Fi IP (e.g. in Settings → Wi‑Fi → (i) → IP Address). Use that IP in the dashboard. If it doesn’t work, use Option A.
+### WiFi Connection (For multiple devices or wireless)
 
-**When the iPhone is not plugged in (not charging):** Use its **Wi‑Fi IP** (e.g. 192.168.0.100) in the dashboard. **127.0.0.1** is only for the USB relay. If you see “Device not ready” or `MuxError` in the terminal, the relay has no USB device — switch to the device’s Wi‑Fi IP in the Device dropdown.
+1. Connect iPhone and Mac to **same WiFi network**
+2. Find iPhone's IP address:
+   - Settings → WiFi → (i) → IP Address
+   - Example: `192.168.0.100`
+3. Use this IP in the dashboard
 
-### 5. Run the bridge and open the dashboard
+**Note:** WiFi requires WDA to be started via Xcode at least once over USB.
+
+### Multiple Devices
+
+Pre-configure device list:
 
 ```bash
-cd bridge
-./start.sh
-# Or with a specific IP: ./start.sh 127.0.0.1   or   ./start.sh 192.168.0.107
+export DEVICES=127.0.0.1,192.168.0.108,192.168.0.109
+./run.sh
 ```
 
-Open **http://localhost:5050** in a browser. Pick a device from the dropdown (or add its IP with “Set”), then use the dashboard.
+Or add devices in the dashboard using the **Set** button.
 
-### Multiple devices
+</details>
 
-Set `DEVICES` before starting: `export DEVICES=127.0.0.1,192.168.0.108` or add each device’s IP in the dashboard with “Set”.
+<details>
+<summary><b>Configuration Options</b></summary>
 
-## Instructions
+### Environment Variables
 
-### First time (once per Mac / device)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `IP` | (none) | Default device IP |
+| `PORT` | `5050` | Bridge server port |
+| `WDA_PORT` | `8100` | WDA port on device |
+| `DEVICES` | (none) | Comma-separated device IPs |
+| `SCREEN_WIDTH` | `393` | Fallback screen width |
+| `SCREEN_HEIGHT` | `852` | Fallback screen height |
 
-1. **Mac:** Install Xcode and Python 3. From UDITA run `./setup.sh` to install bridge deps and check tools.
-2. **Signing:** Open `wda/WebDriverAgent.xcodeproj` in Xcode. For **WebDriverAgentRunner** and **WebDriverAgentLib**: Signing & Capabilities → Automatically manage signing → choose your **Team** → set a unique **Bundle ID** (e.g. `com.yourname.WebDriverAgentRunner`).
-3. **iPhone:** Connect via USB, unlock and tap “Trust”. Run `./install-wda.sh` to build and run WDA on the device. First run may ask for Apple ID.
-
-### Every time you want to control a device
-
-1. **Start:** From UDITA run `./run.sh`. Dependencies install if needed; USB relay starts automatically when possible.
-2. **Dashboard:** Open **http://localhost:5050** in a browser.
-3. **Device list:** The bridge scans the local subnet every 15s; the dropdown refreshes every 10s. Wi‑Fi devices appear automatically. For USB, use **127.0.0.1** (relay) or add it with **Set**. When the iPhone is **not** plugged in, pick its **Wi‑Fi IP** (e.g. 192.168.0.100) to avoid “Device not ready” errors.
-4. **Select device:** Pick an IP from the **Device** dropdown. All actions (tap, swipe, screenshot, apps, etc.) apply to that device.
-5. **Add IP:** To use an IP not in the list (e.g. USB relay), type it and click **Set**.
-
-### Using the dashboard
-
-- **Screen:** Click = tap, drag = swipe, hold ~0.5s = long-press, right-click = long-press, double-click = double-tap. Scroll wheel = scroll; Ctrl+wheel = pinch. Ctrl+click = two-finger tap, Alt+click = force touch.
-- **Quick actions:** Home, swipe directions, Lock/Unlock, Notifications, Control Center, App Switcher, Spotlight. Use the cards for Call, Apps, Keyboard, etc.
-- **Battery and monitoring:** In the **Device** card, use **Battery**, **Info**, **Active App**, **Orientation**, **Locked?** — the result appears in the **Raw API** box (green box) below. Use **Test all monitoring** to run battery + device-info + active-app in one go.
-- **Multi-device:** Use **Scan now** in the header to force a network scan; the dropdown updates in a few seconds. Devices must be on the same Wi‑Fi subnet as the Mac and have WDA running. You can also add an IP manually and click **Set**.
-- **Logs:** Server events and your actions appear in the Logs card. Use Raw API to send custom requests.
-
-### Refresh vs restart
-
-- **Dashboard (HTML/JS) changes:** Just refresh the browser (F5 or Cmd+R). No need to restart the bridge.
-- **Server (Python) changes:** Stop the bridge (Ctrl+C) and run `./run.sh` again.
-
-## Configuration
-
-Override defaults with env or CLI so it works on any Mac/network:
-
-| Env / CLI | Default | Purpose |
-|-----------|---------|---------|
-| `IP` or `--ip` | (none) | Default device IP so you don’t have to pick in the dashboard. |
-| `WDA_PORT` | `8100` | Port WDA listens on on the device. |
-| `PORT` or `--port` | `5050` | Port the bridge (and dashboard) listens on. Use if 5050 is taken. |
-| `DEVICES` | (none) | Comma-separated IPs to show in the list at startup (e.g. `127.0.0.1,192.168.0.108`). |
-| `SCREEN_WIDTH` / `SCREEN_HEIGHT` | `393` / `852` | Fallback screen size when WDA is unreachable. |
-
-Examples:
+### Examples
 
 ```bash
-# Default (scan + pick in dashboard)
-./run.sh
-
-# Use USB relay as default device
+# Use specific device by default
 ./run.sh 127.0.0.1
 
-# Different bridge port
-PORT=5051 ./run.sh
+# Change bridge port
+PORT=8080 ./run.sh
 
 # Pre-fill device list
 export DEVICES=192.168.0.107,192.168.0.108
 ./run.sh
+
+# Custom WDA port
+WDA_PORT=8200 ./run.sh
 ```
 
-## Tech
+### Command Line Arguments
 
-- **iPhone:** WebDriverAgent (WDA), HTTP API on port 8100
-- **Mac:** Python 3, Flask, requests
-- **Dashboard:** HTML/CSS/JS — device picker, screen mirror, tap/swipe/gestures, apps, logs
-- **Optional:** pymobiledevice3 + tunneld for app launch when not on USB
+```bash
+# Specify device IP
+./run.sh 192.168.0.100
 
-## Why not a single package for the iPhone?
+# Change port
+./run.sh --port 8080
 
-WDA is an **XCUITest test runner**, not a normal app. Apple requires it to be **built and signed on your Mac with your Apple ID** and installed via Xcode (or `install-wda.sh`). It cannot be distributed as one installable IPA or App Store app — each user must build it once with their own signing. After that, `./install-wda.sh` and `./start.sh` handle install and relay.
+# Specify device IP and port
+./run.sh --ip 192.168.0.100 --port 8080
+```
 
-## Layout
+</details>
 
-| Path     | Purpose |
-|----------|---------|
-| **bridge/** | Mac bridge (Flask + dashboard). Multi-device. |
-| **wda/**    | WebDriverAgent source. Build and run on each iPhone. |
-| **run.sh** | Single entry point: installs deps if needed, starts relay + bridge. |
-| **setup.sh** | Full setup (deps + checks); run once. |
-| **install-wda.sh** | Builds and runs WDA on connected iPhone; run once after signing. |
-| **ios/**    | Empty (legacy app removed). |
+<details>
+<summary><b>Troubleshooting</b></summary>
+
+### "Device not ready" error
+
+**Cause:** USB relay has no device connected, but you're using 127.0.0.1
+
+**Solution:** 
+- If iPhone is unplugged: Use WiFi IP instead (e.g., `192.168.0.100`)
+- If iPhone is plugged in: Check USB connection, unlock device, restart relay
+
+### "WDA not reachable"
+
+**Cause:** WDA is not running on the iPhone
+
+**Solution:**
+1. Open Xcode: `open wda/WebDriverAgent.xcodeproj`
+2. Select your iPhone in toolbar
+3. Product → Test (Cmd+U)
+4. Wait for test to start running (don't stop it)
+
+### "Session expired"
+
+**Cause:** WDA session timed out or was interrupted
+
+**Solution:** Refresh the dashboard (F5). A new session will be created automatically.
+
+### "No devices found"
+
+**Cause:** Network scan didn't find any devices
+
+**Solution:**
+- Ensure iPhone and Mac are on same WiFi
+- Ensure WDA is running on iPhone
+- Click **Scan now** button
+- Or add device IP manually with **Set** button
+
+### Xcode signing errors
+
+**Cause:** Bundle ID already in use or team not selected
+
+**Solution:**
+1. Change Bundle ID to something unique
+2. Ensure team is selected in both targets
+3. Try: Xcode → Preferences → Accounts → Download Manual Profiles
+
+### Port already in use
+
+**Cause:** Another process is using port 5050 or 8100
+
+**Solution:**
+```bash
+# Use different port
+PORT=5051 ./run.sh
+
+# Or kill existing process
+lsof -ti:5050 | xargs kill
+```
+
+</details>
+
+---
+
+## Advanced
+
+<details>
+<summary><b>API Reference</b></summary>
+
+The bridge exposes a REST API on port 5050:
+
+### Device Management
+- `GET /api/status` - Bridge and device status
+- `GET /api/devices` - List all devices
+- `POST /api/device/select` - Select device
+- `POST /api/set-ip` - Set device IP
+- `POST /api/scan-now` - Force network scan
+
+### Touch & Gestures
+- `POST /api/tap` - Tap at coordinates
+- `POST /api/double-tap` - Double tap
+- `POST /api/long-press` - Long press
+- `POST /api/swipe` - Swipe gesture
+- `POST /api/pinch` - Pinch zoom
+- `POST /api/scroll` - Scroll
+- `POST /api/two-finger-tap` - Two-finger tap
+- `POST /api/force-touch` - Force touch
+
+### Device Control
+- `POST /api/home` - Press home button
+- `POST /api/lock` - Lock device
+- `POST /api/unlock` - Unlock device
+- `POST /api/press-button` - Press hardware button
+- `GET /api/orientation` - Get orientation
+- `GET /api/battery` - Battery info
+- `GET /api/device-info` - Device information
+
+### Apps
+- `POST /api/launch` - Launch app
+- `POST /api/activate` - Activate app
+- `POST /api/terminate` - Kill app
+- `GET /api/app-list` - List installed apps
+- `GET /api/active-app` - Get active app
+
+### Screen & Elements
+- `GET /api/screenshot` - Take screenshot
+- `GET /api/source` - Get page source XML
+- `GET /api/elements` - List visible elements
+- `POST /api/find` - Find elements
+- `POST /api/click` - Click element by name
+
+### Keyboard & Input
+- `POST /api/type` - Type text
+- `POST /api/dismiss-keyboard` - Dismiss keyboard
+
+### Call Control
+- `POST /api/answer-call` - Answer incoming call
+- `POST /api/decline-call` - Decline incoming call
+
+### Full API documentation available at: `/wda/*` (direct WDA passthrough)
+
+</details>
+
+<details>
+<summary><b>Architecture</b></summary>
+
+### Components
+
+**Bridge (Mac):**
+- `bridge/server.py` - Flask REST API (900 lines)
+- `bridge/dashboard.html` - Web UI (403 lines)
+- `bridge/start.sh` - Startup script
+
+**WebDriverAgent (iPhone):**
+- `wda/WebDriverAgentRunner` - Test runner app
+- `wda/WebDriverAgentLib` - Core library (HTTP server + XCTest APIs)
+
+**Helper Scripts:**
+- `run.sh` - Single entry point
+- `setup.sh` - Install dependencies
+- `install-wda.sh` - Build and install WDA
+
+### Data Flow
+
+1. User interacts with dashboard (browser)
+2. Dashboard sends HTTP request to bridge (Flask)
+3. Bridge forwards request to WDA on iPhone
+4. WDA executes action using XCTest framework
+5. WDA returns result to bridge
+6. Bridge returns result to dashboard
+7. Dashboard updates UI
+
+### Tech Stack
+
+**iPhone:**
+- Objective-C (WDA)
+- XCTest framework
+- CocoaHTTPServer
+
+**Mac:**
+- Python 3
+- Flask (web server)
+- Requests (HTTP client)
+
+**Dashboard:**
+- HTML5 Canvas (screen mirror)
+- Vanilla JavaScript (no frameworks)
+- CSS3 (modern styling)
+
+</details>
+
+<details>
+<summary><b>Security & Privacy</b></summary>
+
+### What UDITA Can Do
+
+- Control devices on your local network
+- Tap, swipe, and interact with any app
+- Take screenshots
+- Launch and terminate apps
+- Answer/decline calls
+- Type text and control keyboard
+- Access device information (battery, orientation, etc.)
+
+### What UDITA Cannot Do
+
+- Access device remotely over internet (local network only)
+- Bypass device lock screen (device must be unlocked)
+- Access encrypted data or keychain
+- Install apps or modify system files
+- Access data from other apps (sandboxed)
+
+### Security Considerations
+
+- **Local network only** - Bridge and WDA communicate over local network
+- **No authentication** - Dashboard has no login (anyone on network can access)
+- **No encryption** - HTTP traffic is unencrypted (use on trusted networks)
+- **Device must be unlocked** - WDA requires device to be unlocked
+- **User must build WDA** - Cannot be distributed as pre-built app
+
+### Recommendations
+
+- Use on **trusted networks only** (home/office WiFi)
+- Don't expose bridge to internet
+- Lock your Mac when not in use
+- Stop bridge when not needed (`Ctrl+C`)
+- Use firewall to restrict access to port 5050
+
+</details>
+
+<details>
+<summary><b>FAQ</b></summary>
+
+### Why can't I download WDA as an app?
+
+WDA is an **XCUITest test runner**, not a normal app. Apple requires it to be built and signed with your own Apple ID. It cannot be distributed via App Store or as an IPA file.
+
+### Do I need a paid Apple Developer account?
+
+No! A **free Apple ID** is sufficient. You can sign WDA with any Apple ID.
+
+### Can I control my iPhone remotely over the internet?
+
+Not directly. UDITA is designed for **local network** use. You could set up a VPN to your home network, but this is not officially supported.
+
+### Does this work with iPad?
+
+Yes. WDA supports both iPhone and iPad. Use iPad instead of iPhone in the setup steps.
+
+### Can I automate tasks with UDITA?
+
+Yes! The REST API can be used for automation. You can write Python scripts to control devices programmatically.
+
+### Will this drain my iPhone battery?
+
+WDA uses minimal resources when idle. Battery drain is similar to having an app running in the background.
+
+### Can I use this for app testing?
+
+Yes. UDITA works well for manual testing, QA, and automation. It's built on the same technology used by Appium.
+
+### Is this legal?
+
+Yes! You're controlling your own devices with Apple's official XCTest framework. This is the same technology used by Xcode for UI testing.
+
+</details>
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit issues and pull requests.
+
+### Development
+
+```bash
+# Make changes to bridge/server.py or bridge/dashboard.html
+# Restart bridge to see changes:
+./run.sh
+
+# Dashboard changes only (no restart needed):
+# Refresh browser (F5)
+```
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**WebDriverAgent** (in `wda/` folder) is licensed under BSD License - Copyright (c) Facebook, Inc.
+
+---
+
+## Acknowledgments
+
+- [WebDriverAgent](https://github.com/appium/WebDriverAgent) - Facebook/Appium
+- [Appium](http://appium.io) - Mobile automation framework
+- Named after my girlfriend ❤️
+

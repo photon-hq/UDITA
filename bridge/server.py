@@ -853,6 +853,13 @@ def r_evc():
 def index():
     return Response(DASHBOARD,mimetype="text/html")
 
+@app.route("/logo.png")
+def logo():
+    logo_path=os.path.join(os.path.dirname(os.path.dirname(__file__)),"logo.png")
+    if os.path.exists(logo_path):
+        return send_from_directory(os.path.dirname(logo_path),"logo.png",mimetype="image/png")
+    return "",404
+
 DASHBOARD=open(os.path.join(os.path.dirname(__file__),"dashboard.html")).read() if os.path.exists(os.path.join(os.path.dirname(__file__),"dashboard.html")) else "<h1>Dashboard not found</h1>"
 
 if __name__=="__main__":

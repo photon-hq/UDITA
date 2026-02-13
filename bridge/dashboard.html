@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>UDITA</title>
+<title>UDITA - iPhone Remote Control</title>
+<link rel="icon" type="image/png" href="/logo.png">
 <style>
 :root{--bg:#09090b;--card:#111113;--card2:#18181b;--bdr:#27272a;--accent:#10b981;--blue:#3b82f6;--red:#ef4444;--orange:#f97316;--purple:#a855f7;--text:#e4e4e7;--dim:#71717a;--green:#22c55e;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--sans:system-ui,-apple-system,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -9,7 +10,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
 /* Header */
 header{background:#0f0f11;border-bottom:1px solid var(--bdr);padding:8px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
-header h1{font-size:.95rem;font-weight:700;color:var(--accent);font-family:var(--mono);letter-spacing:-.02em}
+header h1{font-size:.95rem;font-weight:700;color:var(--accent);font-family:var(--mono);letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+header h1 img{width:24px;height:24px;border-radius:4px}
 .pill{padding:2px 8px;border-radius:20px;font-size:.65rem;font-weight:600;font-family:var(--mono)}
 .pill-on{background:#052e16;color:#4ade80;border:1px solid #166534}
 .pill-off{background:#2a0a0a;color:#f87171;border:1px solid #7f1d1d}
@@ -78,7 +80,7 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 </style></head><body>
 
 <header>
-<h1>UDITA</h1>
+<h1><img src="/logo.png" alt="UDITA">UDITA</h1>
 <label class="info" style="margin-right:4px">Device:</label>
 <select id="deviceSelect" onchange="selectDevice(this.value)" style="padding:3px 8px;background:#1a1a1e;border:1px solid var(--bdr);color:var(--green);border-radius:6px;font-size:.7rem;min-width:140px" title="Select iPhone. Scan finds devices on your Wi‑Fi subnet.">
 <option value="">—</option>

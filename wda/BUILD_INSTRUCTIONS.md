@@ -8,7 +8,7 @@ Once installed, it can tap, swipe, and interact with ANY app — including answe
 ### 1. Open in Xcode
 
 ```bash
-open /Users/vandit/facetime/wda/WebDriverAgent.xcodeproj
+open wda/WebDriverAgent.xcodeproj
 ```
 
 ### 2. Set Signing (for BOTH targets)
@@ -18,8 +18,8 @@ In Xcode:
 - Select target **WebDriverAgentRunner**
 - Go to **Signing & Capabilities** tab
 - Check **Automatically manage signing**
-- Select your **Team** (same one you used for RemoteControlAPIApp)
-- Change the **Bundle Identifier** to something unique, e.g.: `monstermini.WebDriverAgentRunner`
+- Select your **Team** (your Apple Developer account)
+- Change the **Bundle Identifier** to something unique, e.g.: `com.yourname.WebDriverAgentRunner`
 
 **IMPORTANT: Also do this for the `WebDriverAgentLib` target** (same team, auto-signing).
 
