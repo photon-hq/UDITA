@@ -200,6 +200,222 @@ The bridge will:
 </details>
 
 <details>
+<summary><b>iPhone App Setup (Detailed)</b></summary>
+
+### Overview
+
+WebDriverAgent (WDA) is an XCUITest-based test runner that acts as a server on your iPhone. This section provides detailed, step-by-step instructions for building and installing it.
+
+### Step 1: Prepare Your iPhone
+
+1. **Connect iPhone to Mac via USB cable**
+   - Use the original Lightning/USB-C cable for best results
+   - Wait for the device to appear in Finder sidebar
+
+2. **Unlock your iPhone**
+   - Enter your passcode to unlock the device
+   - Keep the screen on during setup
+
+3. **Trust this computer**
+   - A popup will appear on iPhone: "Trust This Computer?"
+   - Tap **Trust**
+   - Enter your iPhone passcode when prompted
+   - On Mac, you should now see the device in Finder
+
+4. **Enable Developer Mode (iOS 16+ only)**
+   - Go to iPhone **Settings** → **Privacy & Security** → **Developer Mode**
+   - Toggle **Developer Mode** ON
+   - Tap **Restart** when prompted
+   - After restart, confirm by tapping **Turn On** in the alert
+
+### Step 2: Open WDA Project in Xcode
+
+1. **Open Terminal and navigate to UDITA folder**
+   ```bash
+   cd /path/to/UDITA
+   ```
+
+2. **Open the Xcode project**
+   ```bash
+   open wda/WebDriverAgent.xcodeproj
+   ```
+   
+   Xcode will launch and load the WebDriverAgent project.
+
+### Step 3: Configure Signing for WebDriverAgentRunner
+
+1. **Select the WebDriverAgentRunner target**
+   - In the left sidebar (Project Navigator), click on the blue **WebDriverAgent** project icon at the top
+   - In the center pane, under **TARGETS**, select **WebDriverAgentRunner**
+
+2. **Go to Signing & Capabilities tab**
+   - Click the **Signing & Capabilities** tab at the top of the center pane
+
+3. **Enable automatic signing**
+   - Check the box: **☑ Automatically manage signing**
+
+4. **Select your Team**
+   - Click the **Team** dropdown
+   - If you see your Apple ID, select it
+   - If not, click **Add an Account...** and sign in with your Apple ID
+   - After signing in, select your account from the Team dropdown
+
+5. **Change the Bundle Identifier**
+   - Find the **Bundle Identifier** field (usually shows `com.facebook.WebDriverAgentRunner`)
+   - Change it to something unique, for example:
+     - `com.yourname.WebDriverAgentRunner`
+     - `com.mycompany.wda.runner`
+     - `dev.test.WebDriverAgentRunner`
+   - **Important:** Make it unique to avoid conflicts
+
+6. **Verify signing is successful**
+   - You should see a message: "Signing certificate: Apple Development: your@email.com"
+   - If you see errors, try a different Bundle Identifier
+
+### Step 4: Configure Signing for WebDriverAgentLib
+
+1. **Select the WebDriverAgentLib target**
+   - In the center pane, under **TARGETS**, select **WebDriverAgentLib**
+
+2. **Repeat the signing steps**
+   - Enable **Automatically manage signing**
+   - Select the **same Team** as before
+   - Change **Bundle Identifier** to match your pattern:
+     - If you used `com.yourname.WebDriverAgentRunner`, use `com.yourname.WebDriverAgentLib`
+
+3. **Verify signing is successful**
+   - Check for the signing certificate message
+
+### Step 5: Select Your iPhone as Build Target
+
+1. **Click the device selector in Xcode toolbar**
+   - At the top of Xcode, you'll see a device dropdown (next to the play/stop buttons)
+   - It might say "Any iOS Device" or show a simulator
+
+2. **Select your connected iPhone**
+   - Click the dropdown
+   - Under **iOS Device**, select your iPhone by name
+   - Example: "Vandit's iPhone"
+
+3. **Verify device is selected**
+   - The toolbar should now show your iPhone's name
+
+### Step 6: Build and Run WDA on iPhone
+
+1. **Run the test**
+   - Click **Product** menu → **Test** (or press **⌘ + U**)
+   - Alternatively, click and hold the Play button, then select **Test**
+
+2. **Wait for build to complete**
+   - Xcode will compile the project (may take 1-2 minutes first time)
+   - Watch the progress bar at the top of Xcode
+
+3. **First-time installation: Trust developer on iPhone**
+   - After build completes, check your iPhone
+   - You may see: "Untrusted Developer"
+   - Go to iPhone **Settings** → **General** → **VPN & Device Management**
+   - Tap your Apple ID under **Developer App**
+   - Tap **Trust "your@email.com"**
+   - Tap **Trust** in the confirmation dialog
+   - Return to Xcode and run the test again (**⌘ + U**)
+
+4. **Wait for tests to start**
+   - Xcode will show "Running tests..."
+   - On your iPhone, you'll see the WebDriverAgentRunner app launch briefly
+   - In Xcode's console (bottom pane), you should see:
+     ```
+     ServerURLHere->http://[IP]:8100<-ServerURLHere
+     ```
+   - **Do NOT stop the test!** Keep it running.
+
+5. **Verify WDA is running**
+   - Open Safari on your Mac
+   - Go to: `http://localhost:8100/status`
+   - If you see JSON output with device info, WDA is working!
+
+### Step 7: Alternative - Use Install Script
+
+Instead of steps 5-6, you can use the automated installer:
+
+```bash
+./install-wda.sh
+```
+
+This script will:
+- Build WebDriverAgent
+- Install it on the connected iPhone
+- Start the WDA server
+
+**Note:** You still need to complete signing configuration (Steps 3-4) before running this script.
+
+### Step 8: Keep WDA Running
+
+**Important:** WDA must keep running on your iPhone for UDITA to work.
+
+**Option A: Keep Xcode test running**
+- Leave Xcode open with the test running
+- Don't press the Stop button
+- WDA will stay active
+
+**Option B: Run WDA without Xcode (WiFi only)**
+- Once WDA is installed via Xcode, it can run independently
+- Tap the **WebDriverAgentRunner** app icon on your iPhone
+- The app will launch and start the server
+- You can now close Xcode
+
+**Option C: Use tidevice to start WDA**
+```bash
+tidevice wdaproxy -B com.yourname.WebDriverAgentRunner
+```
+
+### Troubleshooting iPhone Setup
+
+**Problem: "Failed to create provisioning profile"**
+- Solution: Change Bundle Identifier to something more unique
+- Try adding random numbers: `com.yourname.wda123.runner`
+
+**Problem: "Your session has expired. Please log in."**
+- Solution: Go to Xcode → Preferences → Accounts
+- Select your Apple ID → Click "Download Manual Profiles"
+- Try building again
+
+**Problem: "Could not launch WebDriverAgentRunner"**
+- Solution: Check iPhone Settings → General → VPN & Device Management
+- Trust your developer certificate
+- Try running the test again
+
+**Problem: "Device is busy"**
+- Solution: Disconnect and reconnect iPhone
+- Restart Xcode
+- Unlock iPhone and try again
+
+**Problem: Build succeeds but WDA doesn't start**
+- Solution: Check iPhone screen - there may be a popup to allow
+- Make sure iPhone is unlocked
+- Check Xcode console for error messages
+
+**Problem: "Address already in use" (port 8100)**
+- Solution: WDA is already running - this is good!
+- You can proceed to start the bridge
+
+### Verification Checklist
+
+Before proceeding to use UDITA, verify:
+
+- [ ] iPhone is connected via USB (or on same WiFi)
+- [ ] iPhone is unlocked
+- [ ] Developer Mode is enabled (iOS 16+)
+- [ ] Computer is trusted on iPhone
+- [ ] Developer certificate is trusted on iPhone
+- [ ] WDA test is running in Xcode (or WDA app is running on iPhone)
+- [ ] `http://localhost:8100/status` returns JSON (for USB)
+- [ ] OR `http://[iPhone-IP]:8100/status` returns JSON (for WiFi)
+
+Once all items are checked, you're ready to start the UDITA bridge!
+
+</details>
+
+<details>
 <summary><b>Network Configuration</b></summary>
 
 ### USB Connection (Recommended for single device)
