@@ -258,12 +258,19 @@ run_setup() {
     clear
     echo -e "${MAGENTA}${BOLD}"
     echo "       ▄▄▄▄                                           "
-    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA Setup${MAGENTA}"
-    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${DIM}Configuration Wizard${MAGENTA}"
-    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
-    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
+    echo "      ██▀▀██                                          "
+    echo "      ██  ██ ██  ██  ████  █████  ████  ██ ██        "
+    echo "      █████  ██▄▄██ ██  ██  ██   ██  ██ ████         "
+    echo "      ██     ██  ██ ██  ██  ██   ██  ██ ██ ██    ${CYAN}║║  ${GREEN}██  ██ ██████  ██ █████  ███"
+    echo "      ██     ██  ██  ████   ██    ████  ██  ██   ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
+    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  █████"
+    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
+    echo "                                                 ${CYAN}║║  ${GREEN}██████ ██████  ██   ██  ██  ██"
     echo -e "${NC}"
+    echo -e "${DIM}                    Universal Device Interface for Test Automation${NC}"
     echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${YELLOW}${BOLD}Setup Configuration Wizard${NC}"
     echo ""
     
     check_and_install_dependencies
@@ -273,11 +280,29 @@ run_setup() {
     TEAM_ID=$(auto_detect_team_id)
     
     if [ -n "$TEAM_ID" ]; then
-        echo -e "${GREEN}Auto-detected Team ID: $TEAM_ID${NC}"
-    else
-        echo "Enter Apple Developer Team ID"
-        echo "(Xcode → Settings → Accounts)"
-        read -p "Team ID: " TEAM_ID
+        echo -e "${GREEN}✓ Auto-detected Team ID: ${BOLD}$TEAM_ID${NC}"
+        echo ""
+        read -p "$(echo -e ${CYAN}Use this Team ID? [Y/n]:${NC} )" use_auto
+        if [[ "$use_auto" =~ ^[Nn] ]]; then
+            TEAM_ID=""
+        fi
+    fi
+    
+    if [ -z "$TEAM_ID" ]; then
+        echo ""
+        echo -e "${CYAN}${BOLD}Apple Developer Team ID Required${NC}"
+        echo ""
+        echo -e "${DIM}How to find your Team ID:${NC}"
+        echo -e "  1. Open ${BOLD}Xcode${NC}"
+        echo -e "  2. Go to ${BOLD}Settings${NC} (⌘,) → ${BOLD}Accounts${NC}"
+        echo -e "  3. Select your Apple ID"
+        echo -e "  4. Click on your team name"
+        echo -e "  5. Copy the ${BOLD}Team ID${NC} (10-character code)"
+        echo ""
+        echo -e "${DIM}Example: ${BOLD}A1B2C3D4E5${NC}"
+        echo -e "${DIM}Note: Free Apple IDs work! No paid developer account needed.${NC}"
+        echo ""
+        read -p "$(echo -e ${CYAN}Team ID:${NC} )" TEAM_ID
     fi
     
     [ -z "$TEAM_ID" ] && { echo -e "${RED}Team ID required${NC}"; exit 1; }
