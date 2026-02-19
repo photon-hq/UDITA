@@ -262,22 +262,27 @@ kill_port() {
 
 verify_wda_connection() {
     local host="$1"
-    local max_attempts=10
+    local max_attempts=15
     local attempt=1
     
     echo -e "${CYAN}Verifying WDA connection...${NC}"
     
     while [ $attempt -le $max_attempts ]; do
-        if test_wda "$host"; then
-            # Get actual device IP from WDA
-            local device_ip=$(get_wda_ip "$host")
-            echo -e "${GREEN}✓ WDA is responding on $host:8100${NC}"
-            [ -n "$device_ip" ] && echo -e "${DIM}  Device IP: $device_ip${NC}"
-            return 0
+        # More robust test with explicit error handling
+        local response=$(curl -s --connect-timeout 3 "http://$host:8100/status" 2>/dev/null)
+        if [ -n "$response" ]; then
+            if echo "$response" | grep -q '"ready"' && echo "$response" | grep -q '"state"'; then
+                # Get actual device IP from WDA
+                local device_ip=$(echo "$response" | grep -o '"ip":"[^"]*"' | cut -d'"' -f4 | head -1)
+                echo ""
+                echo -e "${GREEN}✓ WDA is responding on $host:8100${NC}"
+                [ -n "$device_ip" ] && echo -e "${DIM}  Device IP: $device_ip${NC}"
+                return 0
+            fi
         fi
         
         printf "\r${CYAN}${SPINNER_FRAMES[$((attempt % ${#SPINNER_FRAMES[@]}))]} Waiting for WDA... (attempt $attempt/$max_attempts)${NC}"
-        sleep 2
+        sleep 3
         attempt=$((attempt + 1))
     done
     
@@ -953,6 +958,9 @@ start_services() {
     fi
     echo ""
     
+    # Give WDA a bit more time to fully initialize after ServerURLHere appears
+    sleep 3
+    
     WDA_HOST=""
     CONN=""
     
@@ -1097,6 +1105,29 @@ start_services() {
         echo -e "   ${CYAN}cat bridge.log${NC}"
         echo ""
         exit 1
+    fi
+    
+    # Auto-select device in bridge server
+    echo ""
+    echo -e "${CYAN}Configuring device connection...${NC}"
+    sleep 2
+    
+    # Try to auto-select the device
+    local device_selected=false
+    for attempt in {1..3}; do
+        if curl -s -X POST "http://127.0.0.1:5050/api/device/select" \
+            -H "Content-Type: application/json" \
+            -d "{\"ip\":\"$WDA_HOST\"}" > /dev/null 2>&1; then
+            device_selected=true
+            echo -e "${GREEN}✓ Device configured: $WDA_HOST${NC}"
+            break
+        fi
+        [ $attempt -lt 3 ] && sleep 1
+    done
+    
+    if [ "$device_selected" = false ]; then
+        echo -e "${YELLOW}⚠ Could not auto-configure device${NC}"
+        echo -e "${DIM}You can manually select device in dashboard${NC}"
     fi
     
     clear

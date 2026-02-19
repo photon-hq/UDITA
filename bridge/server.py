@@ -449,8 +449,163 @@ def r_alert_btns():
 @app.route("/api/launch",methods=["POST"])
 def r_launch():
     d=request.get_json(force=True,silent=True) or {};s=sid()
-    r=w("POST",f"/session/{s}/wda/apps/launch",{"bundleId":d.get("bundle_id"),"arguments":d.get("args",[]),"environment":d.get("env",{})}) if s else {"error":"no session"}
-    ev("launch",{"bundle_id":d.get("bundle_id")});return jsonify({"status":"ok","wda":r})
+    bundle=d.get("bundle_id") or d.get("bundleId")
+    if not bundle:return jsonify({"error":"Missing bundle_id"}),400
+    
+    # iOS 26+ workaround: WDA has NSNull bug with launch/activate
+    # Use URL scheme instead which is more reliable
+    # Map common bundle IDs to URL schemes
+    url_schemes={
+        "com.burbn.instagram":"instagram://",
+        "com.apple.mobilesafari":"http://",
+        "com.apple.MobileSMS":"sms://",
+        "com.apple.mobilemail":"message://",
+        "com.apple.Music":"music://",
+        "com.apple.camera":"camera://",
+        "com.apple.mobilenotes":"mobilenotes://",
+        "com.apple.reminders":"x-apple-reminder://",
+        "com.apple.Maps":"maps://",
+        "com.apple.weather":"weather://",
+        "com.apple.stocks":"stocks://",
+        "com.apple.podcasts":"podcasts://",
+        "com.apple.tv":"videos://",
+        "com.apple.facetime":"facetime://",
+        "com.apple.calculator":"calc://",
+        "com.apple.compass":"compass://",
+        "com.apple.Health":"x-apple-health://",
+        "com.apple.Passbook":"shoebox://",
+        "com.apple.mobileslideshow":"photos-redirect://",
+        "com.apple.AppStore":"itms-apps://",
+        "com.apple.iBooks":"ibooks://",
+        "com.apple.news":"applenews://",
+        "com.apple.Home":"com.apple.Home://",
+        "com.apple.shortcuts":"shortcuts://",
+        "com.apple.findmy":"findmy://",
+        "com.facebook.Facebook":"fb://",
+        "com.atebits.Tweetie2":"twitter://",
+        "com.google.chrome.ios":"googlechrome://",
+        "ph.telegra.Telegraph":"tg://",
+        "net.whatsapp.WhatsApp":"whatsapp://",
+        "com.toyopagroup.picaboo":"snapchat://",
+        "com.zhiliaoapp.musically":"snssdk1128://",
+        "com.google.Gmail":"googlegmail://",
+        "com.spotify.client":"spotify://",
+        "com.netflix.Netflix":"nflx://",
+        "com.amazon.Amazon":"amazon://",
+        "com.ubercab.UberClient":"uber://",
+        "com.contextoptional.Lyft":"lyft://",
+        "com.airbnb.app":"airbnb://",
+        "com.linkedin.LinkedIn":"linkedin://",
+        "com.reddit.Reddit":"reddit://",
+        "com.pinterest":"pinterest://",
+        "com.tumblr.tumblr":"tumblr://",
+        "com.getdropbox.Dropbox":"dbapi-1://",
+        "com.google.Drive":"googledrive://",
+        "com.microsoft.Office.Outlook":"ms-outlook://",
+        "com.microsoft.skype.teams":"msteams://",
+        "us.zoom.videomeetings":"zoomus://",
+        "com.skype.skype":"skype://",
+        "com.discord":"discord://",
+        "com.slack.Slack":"slack://",
+        "com.microsoft.Office.Word":"ms-word://",
+        "com.microsoft.Office.Excel":"ms-excel://",
+        "com.microsoft.Office.Powerpoint":"ms-powerpoint://",
+        "com.adobe.Adobe-Reader":"com.adobe.Adobe-Reader://",
+        "com.shazam.Shazam":"shazam://",
+        "com.soundcloud.TouchApp":"soundcloud://",
+        "com.pandora":"pandora://",
+        "com.apple.podcasts":"podcasts://",
+        "com.google.Maps":"comgooglemaps://",
+        "com.waze.iphone":"waze://",
+        "com.yelp.yelpiphone":"yelp://",
+        "com.tripadvisor.TripAdvisor":"tripadvisor://",
+        "com.booking.BookingApp":"booking://",
+        "com.expedia.ExpediaApp":"expedia://",
+        "com.duolingo.DuolingoMobile":"duolingo://",
+        "com.khanacademy.Khan-Academy":"khanacademy://",
+        "com.udemy.ios":"udemy://",
+        "com.coursera.ios":"coursera://",
+        "com.nike.nikeplus-gps":"nike://",
+        "com.fitbit.FitbitMobile":"fitbit://",
+        "com.strava.stravaride":"strava://",
+        "com.myfitnesspal.mfp":"myfitnesspal://",
+        "com.runtastic.runtasticPro":"runtastic://",
+        "com.headspace.ginger":"headspace://",
+        "com.calm.Calm":"calm://",
+        "com.bamboohr.bamboo":"bamboohr://",
+        "com.evernote.iPhone.Evernote":"evernote://",
+        "com.notion.NotionApp":"notion://",
+        "com.trello":"trello://",
+        "com.asana.mobile":"asana://",
+        "com.monday.monday":"monday://",
+        "com.basecamp.bc3-ios":"basecamp://",
+        "com.atlassian.JIRAMobile":"jira://",
+        "com.github.GitHubApp":"github://",
+        "com.bitbucket.Bitbucket":"bitbucket://",
+        "com.gitlab.GitLabApp":"gitlab://",
+        "com.postman.PostmanApp":"postman://",
+        "com.figma.Figma":"figma://",
+        "com.canva.editor":"canva://",
+        "com.adobe.lrmobile":"lightroom://",
+        "com.vsco.cam":"vsco://",
+        "com.burbn.hyperlapse":"hyperlapse://",
+        "com.burbn.boomerang":"boomerang://",
+        "com.burbn.layout":"layout://",
+        "com.tiktok.TikTok":"snssdk1233://",
+        "com.zhiliaoapp.musically.go":"musically://",
+        "com.bitmoji.Bitmoji":"bitmoji://",
+        "com.giphy.giphyformessenger":"giphy://",
+        "com.tenor.TenorKeyboard":"tenor://",
+        "com.google.Photos":"googlephotos://",
+        "com.amazon.photos":"amazonphotos://",
+        "com.microsoft.Office.OneDrive":"ms-onedrive://",
+        "com.box.BoxNet":"box://",
+        "com.apple.iCloudDriveApp":"icloud://",
+        "com.google.Docs":"googledocs://",
+        "com.google.Sheets":"googlesheets://",
+        "com.google.Slides":"googleslides://",
+        "com.apple.Pages":"pages://",
+        "com.apple.Numbers":"numbers://",
+        "com.apple.Keynote":"keynote://",
+        "com.apple.garageband":"garageband://",
+        "com.apple.iMovie":"imovie://",
+        "com.apple.clips":"clips://",
+        "com.apple.VoiceMemos":"voicememos://",
+        "com.apple.Translate":"translate://",
+        "com.apple.measure":"measure://",
+        "com.apple.magnifier":"magnifier://",
+        "com.apple.shortcuts":"shortcuts://",
+        "com.apple.Preferences":"prefs://",
+        "com.apple.mobiletimer":"clock://",
+        "com.apple.VoiceMemos":"voicememos://",
+        "com.apple.Passbook":"shoebox://",
+        "com.apple.wallet":"wallet://",
+        "com.apple.tips":"tips://",
+        "com.apple.findmy":"findmy://",
+        "com.apple.Fitness":"fitness://",
+        "com.apple.journal":"journal://",
+        "com.apple.freeform":"freeform://",
+    }
+    
+    url_scheme=url_schemes.get(bundle)
+    if url_scheme:
+        # Use URL scheme to launch app - press home first to ensure we're at springboard
+        w("POST",f"/session/{s}/wda/pressButton",{"name":"home"}) if s else None
+        time.sleep(0.3)
+        # Use Siri to open the app (more reliable than URL on iOS 16+)
+        # Actually, use simpler method: tap on screen coordinates where app icon is
+        # Better: use XCUITest's springboard API
+        r=w("POST",f"/wda/homescreen") if s else {"error":"no session"}
+        time.sleep(0.5)
+        # Now open URL scheme via Safari/system
+        r2=w("POST",f"/session/{s}/url",{"url":url_scheme}) if s else {"error":"no session"}
+        ev("launch",{"bundle_id":bundle,"method":"url_scheme"})
+        return jsonify({"status":"ok","method":"url_scheme","wda":r2})
+    else:
+        # Fallback: try activate (may fail on iOS 26+)
+        r=w("POST",f"/session/{s}/wda/apps/activate",{"bundleId":bundle}) if s else {"error":"no session"}
+        ev("launch",{"bundle_id":bundle,"method":"activate"})
+        return jsonify({"status":"ok","method":"activate","wda":r})
 
 @app.route("/api/activate",methods=["POST"])
 def r_activate():
