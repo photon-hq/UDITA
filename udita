@@ -464,14 +464,86 @@ run_setup() {
     
     echo ""
     echo -e "${CYAN}${SPINNER_FRAMES[0]} Building WebDriverAgent...${NC}"
+    echo -e "${DIM}This may take 1-2 minutes on first run...${NC}"
+    echo ""
+    
     cd wda
-    xcodebuild build-for-testing \
-      -project WebDriverAgent.xcodeproj \
-      -scheme WebDriverAgentRunner \
-      -destination "id=$UDID" \
-      -allowProvisioningUpdates > /dev/null 2>&1
+    
+    # Build with visible output and timeout
+    BUILD_SUCCESS=false
+    (
+        xcodebuild build-for-testing \
+          -project WebDriverAgent.xcodeproj \
+          -scheme WebDriverAgentRunner \
+          -destination "id=$UDID" \
+          -allowProvisioningUpdates 2>&1 | tee ../wda_build.log | grep -E "^\*\*|error:|warning:|note:|Signing|Processing|Compiling|Linking|Testing|BUILD"
+    ) &
+    BUILD_PID=$!
+    
+    # Wait for build with timeout (5 minutes)
+    local build_timeout=300
+    local build_elapsed=0
+    while kill -0 $BUILD_PID 2>/dev/null; do
+        if [ $build_elapsed -ge $build_timeout ]; then
+            echo ""
+            echo -e "${RED}${BOLD}✗ Build timed out after 5 minutes${NC}"
+            kill -9 $BUILD_PID 2>/dev/null
+            cd ..
+            echo ""
+            echo -e "${YELLOW}The build is taking too long. This usually means:${NC}"
+            echo -e "1. Xcode is waiting for user input (check for prompts)"
+            echo -e "2. iPhone is locked or not trusted"
+            echo -e "3. Network/provisioning issues"
+            echo ""
+            echo -e "${YELLOW}Check wda_build.log for details:${NC}"
+            echo -e "${CYAN}tail -50 wda_build.log${NC}"
+            echo ""
+            exit 1
+        fi
+        sleep 2
+        build_elapsed=$((build_elapsed + 2))
+        printf "\r${CYAN}${SPINNER_FRAMES[$(((build_elapsed / 2) % ${#SPINNER_FRAMES[@]}))]} Building... (${build_elapsed}s)${NC}"
+    done
+    
+    wait $BUILD_PID
+    BUILD_EXIT_CODE=$?
+    
+    if [ $BUILD_EXIT_CODE -eq 0 ]; then
+        BUILD_SUCCESS=true
+    fi
     
     cd ..
+    
+    # Check build result
+    if [ "$BUILD_SUCCESS" = false ] || ! grep -q "BUILD SUCCEEDED" wda_build.log 2>/dev/null; then
+        echo ""
+        echo -e "${RED}${BOLD}✗ Build Failed${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}Common Issues:${NC}"
+        echo ""
+        
+        # Check for specific errors
+        if grep -q "Signing for.*requires a development team" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Code signing problem${NC}"
+            echo -e "${DIM}Solution: Verify Team ID is correct${NC}"
+            echo -e "${DIM}Your Team ID: $TEAM_ID${NC}"
+        elif grep -q "No profiles.*matching.*found" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Provisioning profile not found${NC}"
+            echo -e "${DIM}Solution: Open Xcode and sign in with your Apple ID${NC}"
+        elif grep -q "User interaction is not allowed" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Xcode needs authorization${NC}"
+            echo -e "${DIM}Solution: Open Xcode once and accept any prompts${NC}"
+        elif grep -q "device locked" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: iPhone is locked${NC}"
+            echo -e "${DIM}Solution: Unlock your iPhone and try again${NC}"
+        fi
+        
+        echo ""
+        echo -e "${YELLOW}Full build log saved to: ${BOLD}wda_build.log${NC}"
+        echo -e "${DIM}View with: cat wda_build.log${NC}"
+        echo ""
+        exit 1
+    fi
     echo "$TEAM_ID" > .setup_done
     
     clear
@@ -575,7 +647,8 @@ start_services() {
     
     # Start WebDriverAgent
     echo ""
-    animate_loading "Starting WebDriverAgent" 2
+    echo -e "${CYAN}Starting WebDriverAgent...${NC}"
+    echo -e "${DIM}Launching test runner on device...${NC}"
     cd wda
     nohup xcodebuild test-without-building \
       -project WebDriverAgent.xcodeproj \
@@ -585,16 +658,44 @@ start_services() {
     WDA_PID=$!
     cd ..
     
-    # Wait for WDA to initialize
-    sleep 3
+    # Wait for WDA to initialize with progress indicator
+    echo -e "${DIM}Waiting for WebDriverAgent to start...${NC}"
+    local wda_wait=0
+    local wda_max_wait=30
+    while [ $wda_wait -lt $wda_max_wait ]; do
+        # Check if process is still running
+        if ! kill -0 $WDA_PID 2>/dev/null; then
+            echo ""
+            echo -e "${RED}✗ WebDriverAgent process died${NC}"
+            echo ""
+            echo -e "${YELLOW}Last 30 lines of wda.log:${NC}"
+            tail -30 wda.log
+            echo ""
+            echo -e "${YELLOW}${BOLD}Common Issues:${NC}"
+            echo -e "1. iPhone is locked - ${BOLD}unlock it${NC}"
+            echo -e "2. Trust prompt on iPhone - ${BOLD}tap Trust${NC}"
+            echo -e "3. Developer Mode disabled (iOS 16+) - ${BOLD}enable in Settings${NC}"
+            echo ""
+            exit 1
+        fi
+        
+        # Check if WDA has started (look for ServerURLHere in log)
+        if grep -q "ServerURLHere" wda.log 2>/dev/null; then
+            echo -e "${GREEN}✓ WebDriverAgent started${NC}"
+            break
+        fi
+        
+        printf "\r${CYAN}${SPINNER_FRAMES[$((wda_wait % ${#SPINNER_FRAMES[@]}))]} Waiting... ($wda_wait/$wda_max_wait seconds)${NC}"
+        sleep 1
+        wda_wait=$((wda_wait + 1))
+    done
     
-    # Check if xcodebuild is still running
-    if ! kill -0 $WDA_PID 2>/dev/null; then
-        echo -e "${RED}✗ WebDriverAgent failed to start${NC}"
-        echo -e "${YELLOW}Check wda.log for details:${NC}"
-        tail -20 wda.log
-        exit 1
+    if [ $wda_wait -eq $wda_max_wait ]; then
+        echo ""
+        echo -e "${YELLOW}⚠ WebDriverAgent is taking longer than expected${NC}"
+        echo -e "${DIM}This is normal on first run. Continuing...${NC}"
     fi
+    echo ""
     
     WDA_HOST=""
     CONN=""
