@@ -29,6 +29,7 @@ xcuserdata/
 
 # UDITA runtime
 .setup_done
+.team_id_found
 *.log
 *.pid
 nohup.out

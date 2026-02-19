@@ -40,20 +40,8 @@ animate_loading() {
 show_menu() {
     clear
     
-    # Photon Logo (compact, matching actual logo style) + UDITA
-    echo -e "${MAGENTA}${BOLD}"
-    echo "       ▄▄▄▄                                           "
-    echo "      ██▀▀██                                          "
-    echo "      ██  ██ ██  ██  ████  █████  ████  ██ ██        "
-    echo "      █████  ██▄▄██ ██  ██  ██   ██  ██ ████         "
-    echo "      ██     ██  ██ ██  ██  ██   ██  ██ ██ ██    ${CYAN}║║  ${GREEN}██  ██ ██████  ██ █████  ███"
-    echo "      ██     ██  ██  ████   ██    ████  ██  ██   ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
-    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  █████"
-    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
-    echo "                                                 ${CYAN}║║  ${GREEN}██████ ██████  ██   ██  ██  ██"
-    echo -e "${NC}"
-    echo -e "${DIM}                    Universal Device Interface for Test Automation${NC}"
-    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     
     if [ -f .setup_done ]; then
@@ -158,8 +146,22 @@ stop_services() {
 
 auto_detect_team_id() {
     local team_id=""
+    
+    # Method 1: Try iPhone Developer certificates
     team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "iPhone Developer" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    
+    # Method 2: Try Apple Development certificates
+    [ -z "$team_id" ] && team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    
+    # Method 3: Try iPhone Distribution certificates
+    [ -z "$team_id" ] && team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "iPhone Distribution" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    
+    # Method 4: Check certificates in keychain directly
+    [ -z "$team_id" ] && team_id=$(security find-certificate -a -c "Apple Development" 2>/dev/null | grep "alis" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    
+    # Method 5: Check previously saved Team ID
     [ -z "$team_id" ] && [ -f .setup_done ] && team_id=$(cat .setup_done)
+    
     echo "$team_id"
 }
 
@@ -256,19 +258,8 @@ check_and_install_dependencies() {
 
 run_setup() {
     clear
-    echo -e "${MAGENTA}${BOLD}"
-    echo "       ▄▄▄▄                                           "
-    echo "      ██▀▀██                                          "
-    echo "      ██  ██ ██  ██  ████  █████  ████  ██ ██        "
-    echo "      █████  ██▄▄██ ██  ██  ██   ██  ██ ████         "
-    echo "      ██     ██  ██ ██  ██  ██   ██  ██ ██ ██    ${CYAN}║║  ${GREEN}██  ██ ██████  ██ █████  ███"
-    echo "      ██     ██  ██  ████   ██    ████  ██  ██   ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
-    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  █████"
-    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
-    echo "                                                 ${CYAN}║║  ${GREEN}██████ ██████  ██   ██  ██  ██"
-    echo -e "${NC}"
-    echo -e "${DIM}                    Universal Device Interface for Test Automation${NC}"
-    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${YELLOW}${BOLD}Setup Configuration Wizard${NC}"
     echo ""
@@ -292,12 +283,22 @@ run_setup() {
         echo ""
         echo -e "${CYAN}${BOLD}Apple Developer Team ID Required${NC}"
         echo ""
-        echo -e "${DIM}How to find your Team ID:${NC}"
-        echo -e "  1. Open ${BOLD}Xcode${NC}"
-        echo -e "  2. Go to ${BOLD}Settings${NC} (⌘,) → ${BOLD}Accounts${NC}"
-        echo -e "  3. Select your Apple ID"
-        echo -e "  4. Click on your team name"
-        echo -e "  5. Copy the ${BOLD}Team ID${NC} (10-character code)"
+        echo -e "${YELLOW}${BOLD}Method 1: Keychain Access (Recommended)${NC}"
+        echo -e "${DIM}  1. Open ${BOLD}Applications → Utilities → Keychain Access${NC}"
+        echo -e "${DIM}  2. Select ${BOLD}login${NC} keychain in the left sidebar"
+        echo -e "${DIM}  3. Click ${BOLD}Certificates${NC} category"
+        echo -e "${DIM}  4. Find certificate named:${NC}"
+        echo -e "${DIM}     • ${BOLD}Apple Development: Your Name (TEAM123456)${NC}"
+        echo -e "${DIM}     • ${BOLD}iPhone Developer: Your Name (TEAM123456)${NC}"
+        echo -e "${DIM}     • ${BOLD}iPhone Distribution: Your Name (TEAM123456)${NC}"
+        echo -e "${DIM}  5. Copy the ${BOLD}10-character code in parentheses${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}Method 2: Xcode${NC}"
+        echo -e "${DIM}  1. Open ${BOLD}Xcode${NC}"
+        echo -e "${DIM}  2. Go to ${BOLD}Settings${NC} (⌘,) → ${BOLD}Accounts${NC}"
+        echo -e "${DIM}  3. Select your Apple ID"
+        echo -e "${DIM}  4. Click on your team name"
+        echo -e "${DIM}  5. Copy the ${BOLD}Team ID${NC} (10-character code)"
         echo ""
         echo -e "${DIM}Example: ${BOLD}A1B2C3D4E5${NC}"
         echo -e "${DIM}Note: Free Apple IDs work! No paid developer account needed.${NC}"
@@ -352,14 +353,10 @@ start_services() {
     fi
     
     clear
-    echo -e "${MAGENTA}${BOLD}"
-    echo "       ▄▄▄▄                                           "
-    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA${MAGENTA}"
-    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${YELLOW}Starting Services...${MAGENTA}"
-    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
-    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
-    echo -e "${NC}"
-    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${YELLOW}Starting Services...${NC}"
     echo ""
     
     UDID=$(get_device_udid)
@@ -414,14 +411,10 @@ start_services() {
     sleep 2
     
     clear
-    echo -e "${MAGENTA}${BOLD}"
-    echo "       ▄▄▄▄                                           "
-    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA${MAGENTA}"
-    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${GREEN}✓ Services Running${MAGENTA}"
-    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
-    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
-    echo -e "${NC}"
-    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${GREEN}✓ Services Running${NC}"
     echo ""
     echo -e "${GREEN}${BOLD}  ✓ WebDriverAgent:${NC} Running on $WDA_HOST:8100"
     echo -e "${GREEN}${BOLD}  ✓ Bridge Server:${NC}   http://localhost:5050"
