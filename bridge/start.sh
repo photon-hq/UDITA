@@ -1,7 +1,30 @@
 #!/bin/bash
-# Start bridge. If no device IP given and WDA not at 127.0.0.1, try to start USB relay automatically.
-# Usage: ./start.sh [IP]
+# DEPRECATED: Use ../start.sh from project root instead
+# This script is kept for backwards compatibility
 
+echo "======================================"
+echo " NOTICE"
+echo "======================================"
+echo ""
+echo "Please run from project root:"
+echo ""
+echo "  cd .."
+echo "  ./start.sh"
+echo ""
+echo "Redirecting..."
+echo ""
+
+sleep 2
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+UDITA_ROOT="$(dirname "$SCRIPT_DIR")"
+
+if [ -f "$UDITA_ROOT/start.sh" ]; then
+    cd "$UDITA_ROOT"
+    exec ./start.sh "$@"
+fi
+
+# Fallback to old behavior if new script doesn't exist
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

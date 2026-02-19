@@ -103,6 +103,7 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 <button class="b" style="padding:2px 8px;font-size:.65rem" onclick="snap()">Snap</button>
 <label><input type="checkbox" id="autoScr"> Live</label>
 <label><input type="checkbox" id="showDot" checked> Dot</label>
+<label><input type="checkbox" id="wheelScroll"> Wheel</label>
 <span class="hint" style="margin-left:8px">Screen: click=tap · drag=swipe · hold=long-press · right=long-press · Ctrl+click=2-finger · Alt+click=force · wheel=scroll · Ctrl+wheel=pinch</span>
 </div>
 <canvas id="cv" width="294" height="636"></canvas>
@@ -263,8 +264,10 @@ button{padding:5px 12px;border:none;border-radius:6px;cursor:pointer;font-weight
 <script>
 var W=393,H=852,tpOn=true,logs=[],curX=0,curY=0,scrImg=null,streaming=false;
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+var lastActionTime=0,ACTION_DEBOUNCE=100;
 function gv(id){return document.getElementById(id).value;}
 function rs(ms){setTimeout(snap,ms||400);}
+function debounce(){var now=Date.now();if(now-lastActionTime<ACTION_DEBOUNCE)return false;lastActionTime=now;return true;}
 
 function loadDevices(){
   fetch('/api/devices').then(r=>r.json()).then(d=>{
@@ -311,26 +314,27 @@ document.getElementById('autoScr').addEventListener('change',function(){
 snap();
 
 function scale(e){var r=cv.getBoundingClientRect();var cx=e.clientX!=null?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientX:0);var cy=e.clientY!=null?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:e.changedTouches&&e.changedTouches[0]?e.changedTouches[0].clientY:0);return{x:Math.round(Math.max(0,Math.min(W,(cx-r.left)/r.width*W))),y:Math.round(Math.max(0,Math.min(H,(cy-r.top)/r.height*H)))};}
-var dragStart=null,longPressTimer=null,isLongPress=false,rightClickPending=null,LONG_PRESS_MS=500,SWIPE_THRESH=20;
+var dragStart=null,longPressTimer=null,isLongPress=false,rightClickPending=null,LONG_PRESS_MS=800,SWIPE_THRESH=20;
 function dist(a,b){if(!b)return 0;var bx=b.x!=null?b.x:a.x,by=b.y!=null?b.y:a.y;return Math.hypot(bx-a.x,by-a.y);}
-function sendTap(x,y){api('POST','/api/tap',{x:x,y:y},function(){setEv('Tap ('+x+', '+y+')');addLog('tap','('+x+','+y+')');rs();});}
-function sendSwipe(f,t){api('POST','/api/swipe',{from:f,to:t,duration:0.4},function(){setEv('Swipe ('+f.x+','+f.y+')→('+t.x+','+t.y+')');addLog('swipe','screen');rs(500);});}
-function sendLongPress(x,y){api('POST','/api/long-press',{x:x,y:y,duration:1},function(){setEv('Long-press ('+x+', '+y+')');addLog('long-press','('+x+','+y+')');rs(800);});}
-function sendTwoFingerTap(x,y){api('POST','/api/two-finger-tap',{x:x,y:y},function(){setEv('2-finger ('+x+', '+y+')');addLog('2f','('+x+','+y+')');rs();});}
-function sendForceTouch(x,y){api('POST','/api/force-touch',{x:x,y:y,pressure:1,duration:0.5},function(){setEv('Force ('+x+', '+y+')');addLog('force','('+x+','+y+')');rs(600);});}
+function sendTap(x,y){if(!debounce())return;api('POST','/api/tap',{x:x,y:y},function(){setEv('Tap ('+x+', '+y+')');addLog('tap','('+x+','+y+')');rs();});}
+function sendSwipe(f,t){if(!debounce())return;api('POST','/api/swipe',{from:f,to:t,duration:0.4},function(){setEv('Swipe ('+f.x+','+f.y+')→('+t.x+','+t.y+')');addLog('swipe','screen');rs(500);});}
+function sendLongPress(x,y){if(!debounce())return;api('POST','/api/long-press',{x:x,y:y,duration:1},function(){setEv('Long-press ('+x+', '+y+')');addLog('long-press','('+x+','+y+')');rs(800);});}
+function sendTwoFingerTap(x,y){if(!debounce())return;api('POST','/api/two-finger-tap',{x:x,y:y},function(){setEv('2-finger ('+x+', '+y+')');addLog('2f','('+x+','+y+')');rs();});}
+function sendForceTouch(x,y){if(!debounce())return;api('POST','/api/force-touch',{x:x,y:y,pressure:1,duration:0.5},function(){setEv('Force ('+x+', '+y+')');addLog('force','('+x+','+y+')');rs(600);});}
 function finishPointer(ep,f,t){if(!f)return;var d=dist(f,ep);if(d>=SWIPE_THRESH){sendSwipe(f,{x:ep.x,y:ep.y});}else if(isLongPress){sendLongPress(f.x,f.y);}else if(ep.ctrlKey){sendTwoFingerTap(f.x,f.y);}else if(ep.altKey){sendForceTouch(f.x,f.y);}else{sendTap(f.x,f.y);}}
 cv.addEventListener('mousemove',function(e){if(!tpOn)return;var p=scale(e);curX=p.x;curY=p.y;document.getElementById('cx').value=p.x;document.getElementById('cy').value=p.y;document.getElementById('coords').textContent='('+p.x+', '+p.y+')';if(dragStart){dragStart.to={x:p.x,y:p.y};if(dist(dragStart.from,dragStart.to)>=SWIPE_THRESH&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}}draw();});
-cv.addEventListener('mousedown',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.button===2){rightClickPending={x:p.x,y:p.y};return;}isLongPress=false;if(longPressTimer)clearTimeout(longPressTimer);dragStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};longPressTimer=setTimeout(function(){isLongPress=true;longPressTimer=null;},LONG_PRESS_MS);});
-cv.addEventListener('mouseup',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.button===2){if(rightClickPending){sendLongPress(rightClickPending.x,rightClickPending.y);rightClickPending=null;}return;}if(!dragStart)return;if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}var f=dragStart.from;finishPointer({x:p.x,y:p.y,ctrlKey:e.ctrlKey,altKey:e.altKey},f,dragStart.to);dragStart=null;});
+cv.addEventListener('mousedown',function(e){if(!tpOn||usingTouch)return;e.preventDefault();var p=scale(e);if(e.button===2){rightClickPending={x:p.x,y:p.y};return;}isLongPress=false;if(longPressTimer)clearTimeout(longPressTimer);dragStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y},time:Date.now()};longPressTimer=setTimeout(function(){isLongPress=true;longPressTimer=null;},LONG_PRESS_MS);});
+cv.addEventListener('mouseup',function(e){if(!tpOn||usingTouch)return;e.preventDefault();var p=scale(e);if(e.button===2){if(rightClickPending){sendLongPress(rightClickPending.x,rightClickPending.y);rightClickPending=null;}return;}if(!dragStart)return;if(longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}var duration=Date.now()-dragStart.time;var f=dragStart.from;var actualLongPress=isLongPress&&duration>=LONG_PRESS_MS;if(actualLongPress){isLongPress=false;sendLongPress(f.x,f.y);}else{finishPointer({x:p.x,y:p.y,ctrlKey:e.ctrlKey,altKey:e.altKey},f,dragStart.to);}dragStart=null;});
 cv.addEventListener('mouseleave',function(){if(dragStart&&longPressTimer){clearTimeout(longPressTimer);longPressTimer=null;}dragStart=null;rightClickPending=null;});
 cv.addEventListener('contextmenu',function(e){if(rightClickPending){e.preventDefault();return false;}});
 cv.addEventListener('click',function(e){if(!tpOn)return;if(e.shiftKey){var p=scale(e);addLog('inspect','('+p.x+','+p.y+')');e.preventDefault();}});
 cv.addEventListener('dblclick',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);api('POST','/api/double-tap',{x:p.x,y:p.y},function(){setEv('2x ('+p.x+', '+p.y+')');addLog('2x','('+p.x+','+p.y+')');rs();});});
-cv.addEventListener('wheel',function(e){if(!tpOn)return;e.preventDefault();var p=scale(e);if(e.ctrlKey||e.metaKey){var scl=(e.deltaY>0?0.85:1.15);api('POST','/api/pinch',{x:p.x,y:p.y,scale:scl},function(){setEv('Pinch '+(scl>1?'out':'in'));addLog('pinch',scl);rs(400);});}else{var dir=e.deltaY>0?'down':e.deltaY<0?'up':e.deltaX>0?'right':e.deltaX<0?'left':null;if(dir)api('POST','/api/scroll',{direction:dir},function(){setEv('Scroll '+dir);addLog('scroll',dir);rs(400);});}},{passive:false});
-var touchStart=null,touchLongTimer=null,touchLongFired=false;
-cv.addEventListener('touchstart',function(e){if(!tpOn||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y}};touchLongFired=false;touchLongTimer=setTimeout(function(){touchLongFired=true;touchLongTimer=null;},LONG_PRESS_MS);},{passive:false});
+var lastScrollTime=0,SCROLL_DEBOUNCE=500;
+cv.addEventListener('wheel',function(e){if(!tpOn||!document.getElementById('wheelScroll').checked)return;e.preventDefault();var now=Date.now();if(now-lastScrollTime<SCROLL_DEBOUNCE)return;lastScrollTime=now;var p=scale(e);if(e.ctrlKey||e.metaKey){var scl=(e.deltaY>0?0.85:1.15);api('POST','/api/pinch',{x:p.x,y:p.y,scale:scl},function(){setEv('Pinch '+(scl>1?'out':'in'));addLog('pinch',scl);rs(400);});}else{var dir=e.deltaY>0?'down':e.deltaY<0?'up':e.deltaX>0?'right':e.deltaX<0?'left':null;if(dir)api('POST','/api/scroll',{direction:dir},function(){setEv('Scroll '+dir);addLog('scroll',dir);rs(400);});}},{passive:false});
+var touchStart=null,touchLongTimer=null,touchLongFired=false,usingTouch=false;
+cv.addEventListener('touchstart',function(e){if(!tpOn||e.touches.length!==1)return;e.preventDefault();usingTouch=true;var p=scale(e);touchStart={from:{x:p.x,y:p.y},to:{x:p.x,y:p.y},time:Date.now()};touchLongFired=false;touchLongTimer=setTimeout(function(){touchLongFired=true;touchLongTimer=null;},LONG_PRESS_MS);},{passive:false});
 cv.addEventListener('touchmove',function(e){if(!touchStart||e.touches.length!==1)return;e.preventDefault();var p=scale(e);touchStart.to={x:p.x,y:p.y};if(dist(touchStart.from,touchStart.to)>=SWIPE_THRESH&&touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}},{passive:false});
-cv.addEventListener('touchend',function(e){if(!touchStart)return;if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}var p=e.changedTouches&&e.changedTouches[0]?scale(e.changedTouches[0]):touchStart.to;var f=touchStart.from,d=dist(f,p);if(d>=SWIPE_THRESH){sendSwipe(f,{x:p.x,y:p.y});}else if(touchLongFired){sendLongPress(f.x,f.y);}else{sendTap(f.x,f.y);}touchStart=null;},{passive:false});
+cv.addEventListener('touchend',function(e){if(!touchStart)return;e.preventDefault();if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}var p=e.changedTouches&&e.changedTouches[0]?scale(e.changedTouches[0]):touchStart.to;var f=touchStart.from,d=dist(f,p);var duration=Date.now()-touchStart.time;if(d>=SWIPE_THRESH){sendSwipe(f,{x:p.x,y:p.y});}else if(touchLongFired&&duration>=LONG_PRESS_MS){sendLongPress(f.x,f.y);}else{sendTap(f.x,f.y);}touchStart=null;},{passive:false});
 cv.addEventListener('touchcancel',function(){if(touchLongTimer){clearTimeout(touchLongTimer);touchLongTimer=null;}touchStart=null;});
 
 function setEv(m){document.getElementById('evs').textContent=m;}

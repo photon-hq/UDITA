@@ -1,15 +1,47 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyo
-.venv/
+*$py.class
+*.so
+.Python
 venv/
-*.egg-info/
+ENV/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+DerivedData/
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# UDITA runtime
+.bridge.pid
+.relay.pid
+.setup_done
+.wda.pid
+*.log
+nohup.out
 
 # IDE
+.vscode/
 .idea/
 *.swp
 *.swo
+*~
+
+# Temporary
+*.tmp
+*.bak
+.cache/
