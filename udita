@@ -47,9 +47,14 @@ show_menu() {
     if [ -f .setup_done ]; then
         echo -e "${GREEN}✓ Setup complete${NC}"
         [ -n "$TEAM_ID" ] && echo -e "${DIM}  Team ID: $TEAM_ID${NC}"
-        [ -n "$DEVICE_UDID" ] && echo -e "${DIM}  Device: ${DEVICE_UDID:0:8}...${NC}"
+        if [ -n "$DEVICE_UDID" ]; then
+            echo -e "${DIM}  Device: ${DEVICE_UDID:0:8}...${NC}"
+        else
+            echo -e "${YELLOW}  ⚠ No iPhone connected - Connect via USB to start${NC}"
+        fi
     else
-        echo -e "${YELLOW}⚠ Setup required${NC}"
+        echo -e "${YELLOW}⚠ First-time setup required${NC}"
+        echo -e "${DIM}  Select option 1 or 4 to begin setup${NC}"
     fi
     
     echo ""
@@ -175,8 +180,143 @@ get_device_udid() {
     echo "$udid"
 }
 
+save_wda_host() {
+    local host="$1"
+    local conn="$2"
+    echo "$host|$conn|$(date +%s)" > .wda_host
+}
+
+get_last_wda_host() {
+    if [ -f .wda_host ]; then
+        local saved=$(cat .wda_host)
+        local host=$(echo "$saved" | cut -d'|' -f1)
+        local conn=$(echo "$saved" | cut -d'|' -f2)
+        local timestamp=$(echo "$saved" | cut -d'|' -f3)
+        local now=$(date +%s)
+        local age=$((now - timestamp))
+        
+        # Only use cached IP if less than 1 hour old
+        if [ $age -lt 3600 ]; then
+            echo "$host|$conn"
+        fi
+    fi
+}
+
 test_wda() {
-    curl -s --connect-timeout 2 "http://$1:8100/status" 2>/dev/null | grep -q '"ready"'
+    local host="$1"
+    local response=$(curl -s --connect-timeout 2 "http://$host:8100/status" 2>/dev/null)
+    echo "$response" | grep -q '"ready"' && echo "$response" | grep -q '"state"'
+}
+
+get_wda_ip() {
+    local response=$(curl -s --connect-timeout 2 "http://$1:8100/status" 2>/dev/null)
+    if [ -n "$response" ]; then
+        echo "$response" | grep -o '"ip":"[^"]*"' | cut -d'"' -f4 | head -1
+    fi
+}
+
+check_port_available() {
+    local port=$1
+    ! lsof -i :$port >/dev/null 2>&1
+}
+
+kill_port() {
+    local port=$1
+    echo -e "${YELLOW}Port $port is in use, attempting to free it...${NC}"
+    lsof -ti :$port | xargs kill -9 2>/dev/null || true
+    sleep 1
+    if check_port_available $port; then
+        echo -e "${GREEN}✓ Port $port freed${NC}"
+        return 0
+    else
+        echo -e "${RED}✗ Failed to free port $port${NC}"
+        return 1
+    fi
+}
+
+verify_wda_connection() {
+    local host="$1"
+    local max_attempts=10
+    local attempt=1
+    
+    echo -e "${CYAN}Verifying WDA connection...${NC}"
+    
+    while [ $attempt -le $max_attempts ]; do
+        if test_wda "$host"; then
+            # Get actual device IP from WDA
+            local device_ip=$(get_wda_ip "$host")
+            echo -e "${GREEN}✓ WDA is responding on $host:8100${NC}"
+            [ -n "$device_ip" ] && echo -e "${DIM}  Device IP: $device_ip${NC}"
+            return 0
+        fi
+        
+        printf "\r${CYAN}${SPINNER_FRAMES[$((attempt % ${#SPINNER_FRAMES[@]}))]} Waiting for WDA... (attempt $attempt/$max_attempts)${NC}"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    echo ""
+    echo -e "${RED}✗ WDA is not responding after $max_attempts attempts${NC}"
+    return 1
+}
+
+diagnose_wda_failure() {
+    echo ""
+    echo -e "${YELLOW}${BOLD}Diagnosing WDA Connection Issue...${NC}"
+    echo ""
+    
+    # Check if xcodebuild is running
+    if pgrep -f "xcodebuild.*WebDriverAgent" > /dev/null; then
+        echo -e "${GREEN}✓ WebDriverAgent process is running${NC}"
+    else
+        echo -e "${RED}✗ WebDriverAgent process is not running${NC}"
+        echo -e "${DIM}  This usually means the build failed or crashed${NC}"
+    fi
+    
+    # Check if port 8100 is open
+    if lsof -i :8100 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Port 8100 is open${NC}"
+        local process=$(lsof -i :8100 | grep LISTEN | awk '{print $1}' | head -1)
+        echo -e "${DIM}  Process: $process${NC}"
+    else
+        echo -e "${RED}✗ Port 8100 is not open${NC}"
+        echo -e "${DIM}  WDA is not listening on port 8100${NC}"
+    fi
+    
+    # Check USB relay
+    if pgrep -f "tidevice relay" > /dev/null || pgrep -f "iproxy 8100" > /dev/null; then
+        echo -e "${GREEN}✓ USB relay is running${NC}"
+    else
+        echo -e "${RED}✗ USB relay is not running${NC}"
+        echo -e "${DIM}  Cannot forward port 8100 from iPhone${NC}"
+    fi
+    
+    # Check iPhone connection
+    local udid=$(get_device_udid)
+    if [ -n "$udid" ]; then
+        echo -e "${GREEN}✓ iPhone is connected (${udid:0:8}...)${NC}"
+    else
+        echo -e "${RED}✗ iPhone is not connected${NC}"
+    fi
+    
+    echo ""
+    echo -e "${YELLOW}${BOLD}Possible Solutions:${NC}"
+    echo ""
+    echo -e "${BOLD}1. Check iPhone Trust Settings${NC}"
+    echo -e "   ${DIM}Settings → General → Device Management → Trust certificate${NC}"
+    echo ""
+    echo -e "${BOLD}2. Restart WebDriverAgent${NC}"
+    echo -e "   ${CYAN}./udita stop${NC}"
+    echo -e "   ${CYAN}./udita start${NC}"
+    echo ""
+    echo -e "${BOLD}3. Check Xcode Signing${NC}"
+    echo -e "   ${DIM}Open wda/WebDriverAgent.xcodeproj in Xcode${NC}"
+    echo -e "   ${DIM}Check if signing certificates are valid${NC}"
+    echo ""
+    echo -e "${BOLD}4. Reconnect iPhone${NC}"
+    echo -e "   ${DIM}Unplug and replug USB cable${NC}"
+    echo -e "   ${DIM}Unlock iPhone and trust this Mac${NC}"
+    echo ""
 }
 
 check_and_install_dependencies() {
@@ -334,11 +474,36 @@ run_setup() {
     cd ..
     echo "$TEAM_ID" > .setup_done
     
+    clear
+    echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${GREEN}✓ Setup complete!${NC}"
+    echo -e "${GREEN}${BOLD}✓ Build Complete!${NC}"
     echo ""
-    echo "IMPORTANT: Trust certificate on iPhone"
-    echo "Settings → General → Device Management"
+    echo -e "${YELLOW}${BOLD}⚠  IMPORTANT: One-Time Setup Required on iPhone${NC}"
+    echo ""
+    echo -e "${BOLD}Step 1: Trust the Developer Certificate${NC}"
+    echo -e "${DIM}  On your iPhone:${NC}"
+    echo -e "  1. Open ${BOLD}Settings${NC}"
+    echo -e "  2. Go to ${BOLD}General${NC} → ${BOLD}VPN & Device Management${NC}"
+    echo -e "     ${DIM}(or Device Management / Profiles & Device Management)${NC}"
+    echo -e "  3. Find your Apple ID: ${CYAN}Apple Development: <your-email>${NC}"
+    echo -e "  4. Tap ${BOLD}Trust${NC} → ${BOLD}Trust${NC}"
+    echo ""
+    echo -e "${BOLD}Step 2: Enable Developer Mode (iOS 16+ only)${NC}"
+    echo -e "${DIM}  If you're on iOS 16 or later:${NC}"
+    echo -e "  1. Open ${BOLD}Settings${NC}"
+    echo -e "  2. Go to ${BOLD}Privacy & Security${NC} → ${BOLD}Developer Mode${NC}"
+    echo -e "  3. Toggle ${BOLD}ON${NC} and restart your iPhone"
+    echo ""
+    echo -e "${BOLD}Step 3: Keep iPhone Connected${NC}"
+    echo -e "  • Keep iPhone ${BOLD}connected via USB${NC}"
+    echo -e "  • Keep iPhone ${BOLD}unlocked${NC} during first run"
+    echo -e "  • ${GREEN}After first successful run, you can use Wi-Fi${NC}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}Next:${NC} Run ${CYAN}${BOLD}./udita start${NC} to launch UDITA"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 
@@ -360,84 +525,334 @@ start_services() {
     echo ""
     
     UDID=$(get_device_udid)
-    [ -z "$UDID" ] && { echo -e "${RED}No iPhone found${NC}"; exit 1; }
+    if [ -z "$UDID" ]; then
+        echo -e "${RED}${BOLD}✗ No iPhone Detected${NC}"
+        echo ""
+        echo -e "${YELLOW}${BOLD}Please follow these steps:${NC}"
+        echo ""
+        echo -e "${BOLD}1. Connect iPhone via USB${NC}"
+        echo -e "   ${DIM}• Use a working USB cable${NC}"
+        echo -e "   ${DIM}• Try a different USB port if needed${NC}"
+        echo ""
+        echo -e "${BOLD}2. Unlock Your iPhone${NC}"
+        echo -e "   ${DIM}• Enter your passcode${NC}"
+        echo -e "   ${DIM}• Keep it unlocked during setup${NC}"
+        echo ""
+        echo -e "${BOLD}3. Trust This Mac${NC}"
+        echo -e "   ${DIM}• Look for popup on iPhone: \"Trust This Computer?\"${NC}"
+        echo -e "   ${DIM}• Tap Trust and enter your passcode${NC}"
+        echo ""
+        echo -e "${BOLD}4. Enable Developer Mode (iOS 16+ only)${NC}"
+        echo -e "   ${DIM}• Settings → Privacy & Security → Developer Mode${NC}"
+        echo -e "   ${DIM}• Toggle ON and restart iPhone${NC}"
+        echo ""
+        echo -e "${BOLD}5. Verify Connection${NC}"
+        echo -e "   ${DIM}• Run: ${CYAN}tidevice list${NC}"
+        echo -e "   ${DIM}• Should show your iPhone's UDID${NC}"
+        echo ""
+        echo -e "${CYAN}After completing these steps, run: ${BOLD}./udita start${NC}"
+        echo ""
+        exit 1
+    fi
     
     echo -e "${GREEN}Device: $UDID${NC}"
     
+    # Stop any existing services
+    echo ""
+    animate_loading "Stopping existing services" 1
     pkill -f "xcodebuild.*WebDriverAgent" 2>/dev/null || true
+    pkill -f "tidevice relay" 2>/dev/null || true
+    pkill -f "iproxy 8100" 2>/dev/null || true
     
+    # Check and free port 8100 if needed
+    if ! check_port_available 8100; then
+        if ! kill_port 8100; then
+            echo -e "${RED}Cannot free port 8100. Please manually stop the process using it.${NC}"
+            echo -e "${DIM}Run: lsof -i :8100${NC}"
+            exit 1
+        fi
+    fi
+    
+    # Start WebDriverAgent
+    echo ""
     animate_loading "Starting WebDriverAgent" 2
     cd wda
     nohup xcodebuild test-without-building \
       -project WebDriverAgent.xcodeproj \
       -scheme WebDriverAgentRunner \
       -destination "id=$UDID" \
-      -allowProvisioningUpdates > /dev/null 2>&1 &
+      -allowProvisioningUpdates > ../wda.log 2>&1 &
+    WDA_PID=$!
     cd ..
-    sleep 5
+    
+    # Wait for WDA to initialize
+    sleep 3
+    
+    # Check if xcodebuild is still running
+    if ! kill -0 $WDA_PID 2>/dev/null; then
+        echo -e "${RED}✗ WebDriverAgent failed to start${NC}"
+        echo -e "${YELLOW}Check wda.log for details:${NC}"
+        tail -20 wda.log
+        exit 1
+    fi
     
     WDA_HOST=""
-    echo ""
-    animate_loading "Establishing connection" 2
+    CONN=""
     
+    echo ""
+    echo -e "${CYAN}Establishing connection to WebDriverAgent...${NC}"
+    
+    # Try last known working IP first
+    local last_host=$(get_last_wda_host)
+    if [ -n "$last_host" ]; then
+        local saved_ip=$(echo "$last_host" | cut -d'|' -f1)
+        local saved_conn=$(echo "$last_host" | cut -d'|' -f2)
+        echo -e "${DIM}Trying last known IP: $saved_ip ($saved_conn)...${NC}"
+        
+        if verify_wda_connection "$saved_ip" 2>/dev/null; then
+            WDA_HOST="$saved_ip"
+            CONN="$saved_conn (cached)"
+            echo -e "${GREEN}✓ Connected using cached IP${NC}"
+        else
+            echo -e "${YELLOW}Cached IP not responding, searching...${NC}"
+        fi
+    fi
+    
+    # Try USB connection first
     if command -v tidevice &>/dev/null; then
-        nohup tidevice relay 8100 8100 > /dev/null 2>&1 &
+        echo -e "${DIM}Attempting USB connection (tidevice)...${NC}"
+        pkill -f "tidevice relay 8100" 2>/dev/null || true
+        nohup tidevice relay 8100 8100 > tidevice.log 2>&1 &
         sleep 2
-        test_wda "127.0.0.1" && WDA_HOST="127.0.0.1" && CONN="USB"
+        
+        if verify_wda_connection "127.0.0.1"; then
+            WDA_HOST="127.0.0.1"
+            CONN="USB (tidevice)"
+        fi
     elif command -v iproxy &>/dev/null; then
-        nohup iproxy 8100 8100 > /dev/null 2>&1 &
+        echo -e "${DIM}Attempting USB connection (iproxy)...${NC}"
+        pkill -f "iproxy 8100" 2>/dev/null || true
+        nohup iproxy 8100 8100 > iproxy.log 2>&1 &
         sleep 2
-        test_wda "127.0.0.1" && WDA_HOST="127.0.0.1" && CONN="USB"
+        
+        if verify_wda_connection "127.0.0.1"; then
+            WDA_HOST="127.0.0.1"
+            CONN="USB (iproxy)"
+        fi
     fi
     
+    # Try Wi-Fi if USB failed
     if [ -z "$WDA_HOST" ]; then
-        animate_loading "Scanning Wi-Fi network" 3
+        echo ""
+        echo -e "${YELLOW}USB connection failed, trying Wi-Fi...${NC}"
+        echo -e "${DIM}Scanning local network for iPhone...${NC}"
+        
         SUBNET=$(ifconfig | grep "inet " | grep -v "127.0.0.1" | head -1 | awk '{print $2}' | sed 's/\.[0-9]*$//')
-        for i in {1..254}; do
+        
+        # Fast scan - check common IPs first
+        for i in {100..110} {2..20}; do
             ip="${SUBNET}.$i"
-            test_wda "$ip" 2>/dev/null && { WDA_HOST="$ip"; CONN="Wi-Fi"; break; }
+            if test_wda "$ip" 2>/dev/null; then
+                WDA_HOST="$ip"
+                CONN="Wi-Fi"
+                break
+            fi
         done
+        
+        # Full scan if fast scan failed
+        if [ -z "$WDA_HOST" ]; then
+            echo -e "${DIM}Performing full network scan (this may take a minute)...${NC}"
+            for i in {1..254}; do
+                ip="${SUBNET}.$i"
+                if test_wda "$ip" 2>/dev/null; then
+                    WDA_HOST="$ip"
+                    CONN="Wi-Fi"
+                    break
+                fi
+            done
+        fi
+        
+        if [ -n "$WDA_HOST" ]; then
+            verify_wda_connection "$WDA_HOST" || WDA_HOST=""
+        fi
     fi
     
-    [ -z "$WDA_HOST" ] && { echo -e "${RED}Could not connect to WDA${NC}"; exit 1; }
+    # Connection failed
+    if [ -z "$WDA_HOST" ]; then
+        echo ""
+        echo -e "${RED}${BOLD}✗ Could not connect to WebDriverAgent${NC}"
+        diagnose_wda_failure
+        exit 1
+    fi
     
-    echo -e "${GREEN}✓ Connected via $CONN ($WDA_HOST:8100)${NC}"
+    # Save working IP for next time
+    save_wda_host "$WDA_HOST" "$CONN"
     
     echo ""
+    echo -e "${GREEN}${BOLD}✓ Connected via $CONN ($WDA_HOST:8100)${NC}"
+    
+    # Check and free port 5050 if needed
+    echo ""
+    if ! check_port_available 5050; then
+        echo -e "${YELLOW}Port 5050 is already in use${NC}"
+        if ! kill_port 5050; then
+            echo -e "${RED}Cannot free port 5050. Please manually stop the process using it.${NC}"
+            echo -e "${DIM}Run: lsof -i :5050${NC}"
+            exit 1
+        fi
+    fi
+    
     animate_loading "Starting bridge server" 1
     cd bridge
-    nohup python3 server.py --ip "$WDA_HOST" --port 5050 > /dev/null 2>&1 &
+    nohup python3 server.py --ip "$WDA_HOST" --port 5050 > ../bridge.log 2>&1 &
+    BRIDGE_PID=$!
     cd ..
-    sleep 2
+    sleep 3
+    
+    # Verify bridge server started
+    local retry=0
+    local max_retry=5
+    while [ $retry -lt $max_retry ]; do
+        if curl -s --connect-timeout 2 "http://127.0.0.1:5050/api/ping" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Bridge server is running on port 5050${NC}"
+            break
+        fi
+        retry=$((retry + 1))
+        [ $retry -lt $max_retry ] && sleep 1
+    done
+    
+    if [ $retry -eq $max_retry ]; then
+        echo -e "${RED}✗ Bridge server failed to start${NC}"
+        echo ""
+        if [ -f bridge.log ]; then
+            echo -e "${YELLOW}Last 15 lines of bridge.log:${NC}"
+            tail -15 bridge.log
+        fi
+        echo ""
+        echo -e "${YELLOW}${BOLD}Troubleshooting:${NC}"
+        echo "1. Check if Python dependencies are installed:"
+        echo -e "   ${CYAN}pip3 install flask flask-cors requests${NC}"
+        echo ""
+        echo "2. Verify Python is working:"
+        echo -e "   ${CYAN}python3 --version${NC}"
+        echo ""
+        echo "3. Check full error log:"
+        echo -e "   ${CYAN}cat bridge.log${NC}"
+        echo ""
+        exit 1
+    fi
     
     clear
     echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${GREEN}✓ Services Running${NC}"
+    echo -e "${GREEN}${BOLD}✓ UDITA is Running!${NC}"
     echo ""
     echo -e "${GREEN}${BOLD}  ✓ WebDriverAgent:${NC} Running on $WDA_HOST:8100"
     echo -e "${GREEN}${BOLD}  ✓ Bridge Server:${NC}   http://localhost:5050"
     echo -e "${GREEN}${BOLD}  ✓ Connection:${NC}      $CONN"
     echo ""
     echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  Dashboard:${NC} ${BLUE}http://localhost:5050${NC}"
+    echo -e "  ${BOLD}Open Dashboard:${NC} ${BLUE}${BOLD}http://localhost:5050${NC}"
     echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${DIM}  Controls: Click=tap | Drag=swipe | Hold=long-press${NC}"
+    echo -e "${BOLD}  What You Can Do:${NC}"
+    echo -e "  ${GREEN}•${NC} ${BOLD}Control your iPhone${NC} - Click, swipe, type, gestures"
+    echo -e "  ${GREEN}•${NC} ${BOLD}Live screen mirror${NC} - See your iPhone screen in real-time"
+    echo -e "  ${GREEN}•${NC} ${BOLD}Take screenshots${NC} - Capture screen at any time"
+    echo -e "  ${GREEN}•${NC} ${BOLD}Launch apps${NC} - Open any app by bundle ID"
+    echo -e "  ${GREEN}•${NC} ${BOLD}Use API${NC} - Automate via REST API (see README.md)"
     echo ""
-    echo -e "${YELLOW}  Stop services: ./udita stop${NC}"
+    echo -e "${BOLD}  Quick API Examples:${NC}"
+    echo -e "${DIM}  # Tap at coordinates${NC}"
+    echo -e "  curl -X POST http://localhost:5050/api/tap -d '{\"x\":195,\"y\":426}' -H 'Content-Type: application/json'"
+    echo ""
+    echo -e "${DIM}  # Take screenshot${NC}"
+    echo -e "  curl http://localhost:5050/api/screenshot.png -o screenshot.png"
+    echo ""
+    echo -e "${DIM}  # Type text${NC}"
+    echo -e "  curl -X POST http://localhost:5050/api/type -d '{\"text\":\"Hello iPhone\"}' -H 'Content-Type: application/json'"
+    echo ""
+    echo -e "${YELLOW}  ${BOLD}Stop services:${NC} ${CYAN}./udita stop${NC}"
+    echo -e "${YELLOW}  ${BOLD}Check status:${NC}  ${CYAN}./udita status${NC}"
+    echo ""
+    echo -e "${DIM}  Tip: After first successful run, you can disconnect USB and use Wi-Fi!${NC}"
     echo ""
 }
 
 check_status() {
-    if curl -s --connect-timeout 2 "http://127.0.0.1:5050/api/status" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ UDITA is running${NC}"
-        echo "Dashboard: http://localhost:5050"
+    echo -e "${CYAN}${BOLD}UDITA Status Check${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    # Check bridge server
+    if curl -s --connect-timeout 2 "http://127.0.0.1:5050/api/ping" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Bridge Server:${NC} Running on port 5050"
+        
+        # Get detailed status from API
+        local status=$(curl -s --connect-timeout 2 "http://127.0.0.1:5050/api/status" 2>/dev/null)
+        if [ -n "$status" ]; then
+            local wda_status=$(echo "$status" | grep -o '"wda":"[^"]*"' | cut -d'"' -f4)
+            local wda_url=$(echo "$status" | grep -o '"wda_url":"[^"]*"' | cut -d'"' -f4)
+            local iphone_ip=$(echo "$status" | grep -o '"iphone_ip":"[^"]*"' | cut -d'"' -f4)
+            
+            if [ "$wda_status" = "connected" ]; then
+                echo -e "${GREEN}✓ WebDriverAgent:${NC} Connected"
+                [ -n "$iphone_ip" ] && echo -e "${DIM}  iPhone IP: $iphone_ip${NC}"
+                [ -n "$wda_url" ] && echo -e "${DIM}  WDA URL: $wda_url${NC}"
+            else
+                echo -e "${YELLOW}⚠ WebDriverAgent:${NC} Not reachable"
+                echo -e "${DIM}  This usually means iPhone is disconnected${NC}"
+            fi
+        fi
+        
+        echo ""
+        echo -e "${CYAN}Dashboard:${NC} ${BLUE}http://localhost:5050${NC}"
     else
-        echo -e "${YELLOW}✗ UDITA is not running${NC}"
-        echo "Start: ./udita start"
+        echo -e "${YELLOW}✗ Bridge Server:${NC} Not running"
+        echo ""
+        echo -e "${DIM}Start UDITA with: ${CYAN}./udita start${NC}"
     fi
+    
+    echo ""
+    
+    # Check processes
+    if pgrep -f "xcodebuild.*WebDriverAgent" > /dev/null; then
+        echo -e "${GREEN}✓ WebDriverAgent process is running${NC}"
+    else
+        echo -e "${YELLOW}✗ WebDriverAgent process is not running${NC}"
+    fi
+    
+    if pgrep -f "tidevice relay" > /dev/null || pgrep -f "iproxy 8100" > /dev/null; then
+        echo -e "${GREEN}✓ USB relay is running${NC}"
+    else
+        echo -e "${YELLOW}✗ USB relay is not running${NC}"
+    fi
+    
+    # Check iPhone connection
+    local udid=$(get_device_udid)
+    if [ -n "$udid" ]; then
+        echo -e "${GREEN}✓ iPhone connected:${NC} ${udid:0:8}..."
+    else
+        echo -e "${YELLOW}✗ No iPhone detected${NC}"
+    fi
+    
+    echo ""
+    
+    # Check ports
+    if lsof -i :8100 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Port 8100:${NC} In use (WDA)"
+    else
+        echo -e "${YELLOW}✗ Port 8100:${NC} Not in use"
+    fi
+    
+    if lsof -i :5050 >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Port 5050:${NC} In use (Bridge)"
+    else
+        echo -e "${YELLOW}✗ Port 5050:${NC} Not in use"
+    fi
+    
+    echo ""
 }
 
 

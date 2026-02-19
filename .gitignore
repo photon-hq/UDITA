@@ -30,9 +30,14 @@ xcuserdata/
 # UDITA runtime
 .setup_done
 .team_id_found
+.wda_host
 *.log
 *.pid
 nohup.out
+wda.log
+bridge.log
+tidevice.log
+iproxy.log
 
 # IDE
 .vscode/
