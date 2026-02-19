@@ -1,6 +1,14 @@
 #!/bin/bash
 # UDITA - Universal Device Interface for Test Automation
 # ONE script to rule them all
+#
+# Automatic Code Signing Fix:
+# This script automatically handles iOS code signing issues by:
+# - Auto-detecting Apple Developer Team ID from keychain
+# - Configuring automatic code signing in Xcode project
+# - Detecting missing Xcode accounts and guiding user through setup
+# - Retrying builds with intelligent error recovery
+# - No manual Xcode configuration needed for most users!
 
 set -e
 
@@ -152,20 +160,38 @@ stop_services() {
 auto_detect_team_id() {
     local team_id=""
     
-    # Method 1: Try iPhone Developer certificates
+    # Method 1: Get Team ID from Xcode accounts (most reliable)
+    # This reads the actual Team IDs that Xcode knows about
+    team_id=$(defaults read com.apple.dt.Xcode 2>/dev/null | grep "teamID = " | head -1 | awk -F'= ' '{print $2}' | tr -d ' ;')
+    
+    # Validate it's a 10-character alphanumeric string
+    if [ -n "$team_id" ] && [ ${#team_id} -eq 10 ] && [[ "$team_id" =~ ^[A-Z0-9]+$ ]]; then
+        echo "$team_id"
+        return
+    fi
+    
+    # Method 2: Try iPhone Developer certificates from keychain
     team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "iPhone Developer" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    if [ -n "$team_id" ] && [ ${#team_id} -eq 10 ]; then
+        echo "$team_id"
+        return
+    fi
     
-    # Method 2: Try Apple Development certificates
-    [ -z "$team_id" ] && team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    # Method 3: Try Apple Development certificates
+    team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    if [ -n "$team_id" ] && [ ${#team_id} -eq 10 ]; then
+        echo "$team_id"
+        return
+    fi
     
-    # Method 3: Try iPhone Distribution certificates
-    [ -z "$team_id" ] && team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "iPhone Distribution" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
-    
-    # Method 4: Check certificates in keychain directly
-    [ -z "$team_id" ] && team_id=$(security find-certificate -a -c "Apple Development" 2>/dev/null | grep "alis" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
-    
-    # Method 5: Check previously saved Team ID
-    [ -z "$team_id" ] && [ -f .setup_done ] && team_id=$(cat .setup_done)
+    # Method 4: Check previously saved Team ID
+    if [ -f .setup_done ]; then
+        team_id=$(cat .setup_done)
+        if [ -n "$team_id" ] && [ ${#team_id} -eq 10 ]; then
+            echo "$team_id"
+            return
+        fi
+    fi
     
     echo "$team_id"
 }
@@ -396,12 +422,148 @@ check_and_install_dependencies() {
     echo -e "${GREEN}✓ All dependencies installed${NC}"
 }
 
+check_xcode_account() {
+    local team_id="$1"
+    
+    # Check if Xcode has any accounts configured
+    local xcode_accounts=$(defaults read com.apple.dt.Xcode 2>/dev/null | grep -c "IDEProvisioningTeams" || echo "0")
+    
+    if [ "$xcode_accounts" = "0" ]; then
+        return 1
+    fi
+    
+    # Check if the specific team ID exists in Xcode
+    if defaults read com.apple.dt.Xcode 2>/dev/null | grep -q "$team_id"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+configure_xcode_signing_interactive() {
+    echo ""
+    echo -e "${YELLOW}${BOLD}⚠  Xcode Signing Configuration Required${NC}"
+    echo ""
+    echo -e "${DIM}Opening Xcode to configure code signing...${NC}"
+    echo -e "${DIM}This is a one-time setup.${NC}"
+    echo ""
+    
+    # Open the WebDriverAgent project
+    open -a Xcode "$UDITA_ROOT/wda/WebDriverAgent.xcodeproj"
+    sleep 3
+    
+    echo -e "${BOLD}Please complete these steps in Xcode:${NC}"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} In the left sidebar, click ${BOLD}WebDriverAgent${NC} (blue icon at top)"
+    echo -e "  ${CYAN}2.${NC} Select ${BOLD}WebDriverAgentRunner${NC} target from the list"
+    echo -e "  ${CYAN}3.${NC} Click ${BOLD}Signing & Capabilities${NC} tab"
+    echo -e "  ${CYAN}4.${NC} Check the box: ${BOLD}Automatically manage signing${NC}"
+    echo -e "  ${CYAN}5.${NC} Select your ${BOLD}Team${NC} from the dropdown"
+    echo -e "      ${DIM}(If no team appears, click 'Add Account' and sign in)${NC}"
+    echo -e "  ${CYAN}6.${NC} Repeat steps 2-5 for ${BOLD}WebDriverAgentLib${NC} target"
+    echo -e "  ${CYAN}7.${NC} Close Xcode (⌘Q)"
+    echo ""
+    echo -e "${DIM}Note: A free Apple ID works! No paid developer account needed.${NC}"
+    echo ""
+    read -p "$(echo -e ${GREEN}Press Enter after configuring signing in Xcode...${NC} )" dummy
+    
+    # Close Xcode
+    osascript -e 'quit app "Xcode"' 2>/dev/null || true
+    sleep 2
+}
+
+open_xcode_for_signin() {
+    echo ""
+    echo -e "${YELLOW}${BOLD}⚠  Xcode Account Setup Required${NC}"
+    echo ""
+    echo -e "${DIM}Xcode needs your Apple ID to generate code signing certificates.${NC}"
+    echo -e "${DIM}This is a one-time setup that takes about 30 seconds.${NC}"
+    echo ""
+    echo -e "${CYAN}${BOLD}Opening Xcode Settings...${NC}"
+    echo ""
+    
+    # Open Xcode settings to Accounts pane
+    open -a Xcode
+    sleep 2
+    osascript <<EOF 2>/dev/null || true
+tell application "Xcode"
+    activate
+end tell
+tell application "System Events"
+    tell process "Xcode"
+        keystroke "," using command down
+        delay 1
+    end tell
+end tell
+EOF
+    
+    echo -e "${BOLD}Please complete these steps in Xcode:${NC}"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} In the Settings window, click ${BOLD}Accounts${NC} tab"
+    echo -e "  ${CYAN}2.${NC} Click the ${BOLD}+${NC} button in the bottom left"
+    echo -e "  ${CYAN}3.${NC} Select ${BOLD}Apple ID${NC} and click ${BOLD}Continue${NC}"
+    echo -e "  ${CYAN}4.${NC} Sign in with your Apple ID"
+    echo -e "  ${CYAN}5.${NC} Close the Settings window"
+    echo ""
+    echo -e "${DIM}Note: A free Apple ID works! No paid developer account needed.${NC}"
+    echo ""
+    read -p "$(echo -e ${GREEN}Press Enter after signing in to Xcode...${NC} )" dummy
+    
+    # Close Xcode
+    osascript -e 'quit app "Xcode"' 2>/dev/null || true
+    sleep 2
+}
+
+fix_xcode_signing() {
+    local team_id="$1"
+    local udid="$2"
+    
+    echo -e "${CYAN}Configuring automatic code signing...${NC}"
+    
+    # Enable automatic signing in project.pbxproj
+    sed -i '' 's/CODE_SIGN_STYLE = Manual;/CODE_SIGN_STYLE = Automatic;/g' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    sed -i '' 's/ProvisioningStyle = Manual;/ProvisioningStyle = Automatic;/g' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    # Add DevelopmentTeam to TargetAttributes for WebDriverAgentLib and WebDriverAgentRunner
+    # WebDriverAgentLib target ID: EE158A981CBD452B00A3E3F0
+    # WebDriverAgentRunner target ID: EEF988291C486603005CA669
+    sed -i '' '/EE158A981CBD452B00A3E3F0 = {/,/};/{
+        /CreatedOnToolsVersion/a\
+						DevelopmentTeam = '"$team_id"';\
+						ProvisioningStyle = Automatic;
+    }' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    sed -i '' '/EEF988291C486603005CA669 = {/,/};/{
+        /CreatedOnToolsVersion/a\
+						DevelopmentTeam = '"$team_id"';\
+						ProvisioningStyle = Automatic;
+    }' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    # Remove any hardcoded provisioning profile references
+    sed -i '' 's/PROVISIONING_PROFILE_SPECIFIER = .*;/PROVISIONING_PROFILE_SPECIFIER = "";/g' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    sed -i '' 's/PROVISIONING_PROFILE = .*;/PROVISIONING_PROFILE = "";/g' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    # Set code sign identity to automatic
+    sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = ".*";/"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";/g' wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    echo -e "${GREEN}✓ Automatic signing configured${NC}"
+}
+
 run_setup() {
     clear
     echo -e "${CYAN}${BOLD}UDITA${NC} ${DIM}- Universal Device Interface for Test Automation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${YELLOW}${BOLD}Setup Configuration Wizard${NC}"
+    echo ""
+    echo -e "${DIM}This setup will:${NC}"
+    echo -e "${DIM}  • Auto-detect your Apple Developer Team ID${NC}"
+    echo -e "${DIM}  • Configure WebDriverAgent for code signing${NC}"
+    echo -e "${DIM}  • Build and install WebDriverAgent on your iPhone${NC}"
+    echo -e "${DIM}  • Guide you through any required Xcode configuration${NC}"
+    echo ""
+    echo -e "${GREEN}No paid Apple Developer account required!${NC}"
+    echo -e "${DIM}A free Apple ID works perfectly.${NC}"
     echo ""
     
     check_and_install_dependencies
@@ -454,13 +616,28 @@ run_setup() {
     
     echo -e "${GREEN}Device: $UDID${NC}"
     
-    animate_loading "Configuring Xcode project" 1
-    sed -i '' "s/DEVELOPMENT_TEAM = [^;]*/DEVELOPMENT_TEAM = $TEAM_ID/g" wda/WebDriverAgent.xcodeproj/project.pbxproj
+    # Check if Xcode account is configured
+    echo ""
+    animate_loading "Checking Xcode configuration" 1
     
-    # Generate unique bundle IDs
+    if ! check_xcode_account "$TEAM_ID"; then
+        open_xcode_for_signin
+    else
+        echo -e "${GREEN}✓ Xcode account configured${NC}"
+    fi
+    
+    animate_loading "Configuring Xcode project" 1
+    
+    # Generate unique bundle IDs first (before setting team)
     BUNDLE_SUFFIX=$(echo $TEAM_ID | md5 | cut -c1-8)
     sed -i '' "s/com\.vanditkumar\./com.wda.$BUNDLE_SUFFIX./g" wda/WebDriverAgent.xcodeproj/project.pbxproj
     sed -i '' "s/com\.facebook\./com.wda.$BUNDLE_SUFFIX./g" wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    # Fix signing configuration (this sets automatic signing)
+    fix_xcode_signing "$TEAM_ID" "$UDID"
+    
+    # Set team ID AFTER enabling automatic signing
+    sed -i '' "s/DEVELOPMENT_TEAM = [^;]*/DEVELOPMENT_TEAM = $TEAM_ID/g" wda/WebDriverAgent.xcodeproj/project.pbxproj
     
     echo ""
     echo -e "${CYAN}${SPINNER_FRAMES[0]} Building WebDriverAgent...${NC}"
@@ -469,73 +646,152 @@ run_setup() {
     
     cd wda
     
-    # Build with visible output and timeout
+    # Build with automatic retry logic
     BUILD_SUCCESS=false
-    (
-        xcodebuild build-for-testing \
-          -project WebDriverAgent.xcodeproj \
-          -scheme WebDriverAgentRunner \
-          -destination "id=$UDID" \
-          -allowProvisioningUpdates 2>&1 | tee ../wda_build.log | grep -E "^\*\*|error:|warning:|note:|Signing|Processing|Compiling|Linking|Testing|BUILD"
-    ) &
-    BUILD_PID=$!
+    MAX_BUILD_ATTEMPTS=3
+    BUILD_ATTEMPT=1
     
-    # Wait for build with timeout (5 minutes)
-    local build_timeout=300
-    local build_elapsed=0
-    while kill -0 $BUILD_PID 2>/dev/null; do
-        if [ $build_elapsed -ge $build_timeout ]; then
+    while [ $BUILD_ATTEMPT -le $MAX_BUILD_ATTEMPTS ] && [ "$BUILD_SUCCESS" = false ]; do
+        if [ $BUILD_ATTEMPT -gt 1 ]; then
             echo ""
-            echo -e "${RED}${BOLD}✗ Build timed out after 5 minutes${NC}"
-            kill -9 $BUILD_PID 2>/dev/null
-            cd ..
+            echo -e "${YELLOW}Retry attempt $BUILD_ATTEMPT of $MAX_BUILD_ATTEMPTS...${NC}"
             echo ""
-            echo -e "${YELLOW}The build is taking too long. This usually means:${NC}"
-            echo -e "1. Xcode is waiting for user input (check for prompts)"
-            echo -e "2. iPhone is locked or not trusted"
-            echo -e "3. Network/provisioning issues"
-            echo ""
-            echo -e "${YELLOW}Check wda_build.log for details:${NC}"
-            echo -e "${CYAN}tail -50 wda_build.log${NC}"
-            echo ""
-            exit 1
+            sleep 2
         fi
-        sleep 2
-        build_elapsed=$((build_elapsed + 2))
-        printf "\r${CYAN}${SPINNER_FRAMES[$(((build_elapsed / 2) % ${#SPINNER_FRAMES[@]}))]} Building... (${build_elapsed}s)${NC}"
+        
+        # Build with visible output and timeout
+        (
+            xcodebuild build-for-testing \
+              -project WebDriverAgent.xcodeproj \
+              -scheme WebDriverAgentRunner \
+              -destination "id=$UDID" \
+              -allowProvisioningUpdates \
+              -allowProvisioningDeviceRegistration 2>&1 | tee ../wda_build.log | grep -E "^\*\*|error:|warning:|note:|Signing|Processing|Compiling|Linking|Testing|BUILD"
+        ) &
+        BUILD_PID=$!
+        
+        # Wait for build with timeout (5 minutes)
+        local build_timeout=300
+        local build_elapsed=0
+        while kill -0 $BUILD_PID 2>/dev/null; do
+            if [ $build_elapsed -ge $build_timeout ]; then
+                echo ""
+                echo -e "${RED}${BOLD}✗ Build timed out after 5 minutes${NC}"
+                kill -9 $BUILD_PID 2>/dev/null
+                break
+            fi
+            sleep 2
+            build_elapsed=$((build_elapsed + 2))
+            printf "\r${CYAN}${SPINNER_FRAMES[$(((build_elapsed / 2) % ${#SPINNER_FRAMES[@]}))]} Building... (${build_elapsed}s)${NC}"
+        done
+        
+        wait $BUILD_PID 2>/dev/null
+        BUILD_EXIT_CODE=$?
+        
+        # Check if build succeeded
+        if [ $BUILD_EXIT_CODE -eq 0 ] && grep -q "BUILD SUCCEEDED" ../wda_build.log 2>/dev/null; then
+            BUILD_SUCCESS=true
+            break
+        fi
+        
+        # Analyze failure and attempt auto-fix
+        if [ $BUILD_ATTEMPT -lt $MAX_BUILD_ATTEMPTS ]; then
+            echo ""
+            echo -e "${YELLOW}Analyzing build failure...${NC}"
+            
+            if grep -q "No Account for Team" ../wda_build.log 2>/dev/null; then
+                
+                echo -e "${CYAN}Detected: Xcode account not configured${NC}"
+                cd ..
+                configure_xcode_signing_interactive
+                cd wda
+                
+                # Clean derived data and retry
+                rm -rf ~/Library/Developer/Xcode/DerivedData/WebDriverAgent-* 2>/dev/null
+                
+            elif grep -q "No profiles.*matching.*found" ../wda_build.log 2>/dev/null || \
+                 grep -q "No signing certificate.*found" ../wda_build.log 2>/dev/null; then
+                
+                echo -e "${CYAN}Attempting automatic fix: Cleaning build cache and retrying...${NC}"
+                
+                # Clean derived data
+                rm -rf ~/Library/Developer/Xcode/DerivedData/WebDriverAgent-* 2>/dev/null
+                
+                # Try to unlock keychain (in case it's locked)
+                security unlock-keychain 2>/dev/null || true
+                
+                # Re-apply signing fixes
+                cd ..
+                fix_xcode_signing "$TEAM_ID" "$UDID"
+                cd wda
+                
+            elif grep -q "User interaction is not allowed" ../wda_build.log 2>/dev/null; then
+                echo -e "${YELLOW}Xcode needs authorization. Opening Xcode...${NC}"
+                open -a Xcode WebDriverAgent.xcodeproj
+                echo -e "${DIM}Please accept any authorization prompts in Xcode, then press Enter...${NC}"
+                read -r
+                
+            elif grep -q "device locked" ../wda_build.log 2>/dev/null; then
+                echo -e "${YELLOW}iPhone is locked. Please unlock your iPhone and press Enter...${NC}"
+                read -r
+            fi
+        fi
+        
+        BUILD_ATTEMPT=$((BUILD_ATTEMPT + 1))
     done
-    
-    wait $BUILD_PID
-    BUILD_EXIT_CODE=$?
-    
-    if [ $BUILD_EXIT_CODE -eq 0 ]; then
-        BUILD_SUCCESS=true
-    fi
     
     cd ..
     
-    # Check build result
-    if [ "$BUILD_SUCCESS" = false ] || ! grep -q "BUILD SUCCEEDED" wda_build.log 2>/dev/null; then
+    # Final check
+    if [ "$BUILD_SUCCESS" = false ]; then
         echo ""
-        echo -e "${RED}${BOLD}✗ Build Failed${NC}"
+        echo -e "${RED}${BOLD}✗ Build Failed After $MAX_BUILD_ATTEMPTS Attempts${NC}"
         echo ""
-        echo -e "${YELLOW}${BOLD}Common Issues:${NC}"
+        echo -e "${YELLOW}${BOLD}Detected Issues:${NC}"
         echo ""
         
         # Check for specific errors
-        if grep -q "Signing for.*requires a development team" wda_build.log 2>/dev/null; then
-            echo -e "${RED}Issue: Code signing problem${NC}"
-            echo -e "${DIM}Solution: Verify Team ID is correct${NC}"
+        if grep -q "No Account for Team" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Xcode account not configured${NC}"
+            echo -e "${DIM}The automatic retry should have opened Xcode for you.${NC}"
+            echo -e "${DIM}If you skipped it, you need to configure signing manually.${NC}"
+            echo ""
+            echo -e "${CYAN}${BOLD}Manual Fix:${NC}"
+            echo -e "Run this command to try again: ${CYAN}./udita setup${NC}"
+            echo -e "Or configure manually:"
+            echo -e "1. ${CYAN}open wda/WebDriverAgent.xcodeproj${NC}"
+            echo -e "2. Select ${BOLD}WebDriverAgentRunner${NC} → ${BOLD}Signing & Capabilities${NC}"
+            echo -e "3. Enable ${BOLD}Automatically manage signing${NC} and select your Team"
+            echo -e "4. Repeat for ${BOLD}WebDriverAgentLib${NC} target"
+            
+        elif grep -q "No profiles.*matching.*found" wda_build.log 2>/dev/null || \
+             grep -q "No signing certificate.*found" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Code signing certificates or profiles missing${NC}"
+            echo -e "${DIM}Xcode couldn't generate the required provisioning profiles.${NC}"
+            echo ""
+            echo -e "${CYAN}${BOLD}Quick Fix:${NC}"
+            echo -e "1. ${CYAN}open wda/WebDriverAgent.xcodeproj${NC}"
+            echo -e "2. Select ${BOLD}WebDriverAgentRunner${NC} → ${BOLD}Signing & Capabilities${NC}"
+            echo -e "3. Enable ${BOLD}Automatically manage signing${NC}"
+            echo -e "4. Select your Team (if no team, click 'Add Account' first)"
+            echo -e "5. Repeat for ${BOLD}WebDriverAgentLib${NC} target"
+            echo -e "6. Run: ${CYAN}./udita setup${NC}"
+            
+        elif grep -q "Signing for.*requires a development team" wda_build.log 2>/dev/null; then
+            echo -e "${RED}Issue: Team ID configuration problem${NC}"
             echo -e "${DIM}Your Team ID: $TEAM_ID${NC}"
-        elif grep -q "No profiles.*matching.*found" wda_build.log 2>/dev/null; then
-            echo -e "${RED}Issue: Provisioning profile not found${NC}"
-            echo -e "${DIM}Solution: Open Xcode and sign in with your Apple ID${NC}"
+            echo -e "${DIM}Solution: Verify this Team ID is correct${NC}"
+            
         elif grep -q "User interaction is not allowed" wda_build.log 2>/dev/null; then
             echo -e "${RED}Issue: Xcode needs authorization${NC}"
-            echo -e "${DIM}Solution: Open Xcode once and accept any prompts${NC}"
+            echo -e "${DIM}Solution: Open Xcode and accept any prompts${NC}"
+            
         elif grep -q "device locked" wda_build.log 2>/dev/null; then
             echo -e "${RED}Issue: iPhone is locked${NC}"
             echo -e "${DIM}Solution: Unlock your iPhone and try again${NC}"
+        else
+            echo -e "${RED}Issue: Unknown build error${NC}"
+            echo -e "${DIM}Check the build log for details${NC}"
         fi
         
         echo ""
