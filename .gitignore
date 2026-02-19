@@ -11,6 +11,7 @@ ENV/
 .DS_Store
 .AppleDouble
 .LSOverride
+*.png
 
 # Xcode
 *.xcodeproj/*
