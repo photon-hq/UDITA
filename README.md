@@ -4,51 +4,74 @@ Control your iPhone from your Mac using WebDriverAgent.
 
 ## Quick Start
 
-### One Command Setup
-
 ```bash
-./start.sh
+./udita
 ```
 
-That's it! The script will:
-- ✅ Auto-install USB tools (tidevice)
-- ✅ Auto-detect your Apple Developer Team ID
-- ✅ Auto-configure bundle IDs
-- ✅ Build WebDriverAgent
-- ✅ Start all services
+**That's it!** One script, one command:
+- ✓ Interactive menu with color-coded interface
+- ✓ Auto-installs ALL dependencies (Python, pip, tidevice, Flask, etc.)
+- ✓ Auto-detects your Apple Developer Team ID
+- ✓ Auto-configures and builds WebDriverAgent
+- ✓ Auto-detects connection (USB or Wi-Fi)
+- ✓ Starts dashboard at http://localhost:5050
 
 **First time only:** Trust certificate on iPhone
 - Settings → General → VPN & Device Management → Trust
 
-### Daily Use
+## Interactive Menu
 
-```bash
-./start.sh              # Start UDITA
-./start.sh stop         # Stop UDITA
+Run `./udita` to launch the interactive menu:
+
+```
+╔════════════════════════════════════════╗
+║     🚀 UDITA - iPhone Control         ║
+╚════════════════════════════════════════╝
+
+✓ Setup complete
+  Team ID: 5U6B53ATF5
+  Device: 00008120...
+
+Commands:
+  1) Start UDITA
+  2) Stop UDITA
+  3) Check Status
+  4) Setup/Reconfigure
+  q) Quit
+
+Select option [1-4, q]:
 ```
 
-Dashboard: **http://localhost:5050**
+## Direct Commands
+
+```bash
+./udita         # Interactive menu (default)
+./udita start   # Start UDITA directly
+./udita stop    # Stop all services
+./udita status  # Check if running
+./udita setup   # Run setup
+```
 
 ## Features
 
 - **Live screen mirror** - See iPhone screen in real-time
-- **Touch control** - Click to tap, drag to swipe, hold for long-press
+- **Touch control** - Click=tap, drag=swipe, hold=long-press
 - **Gestures** - Pinch, rotate, force touch, multi-finger
-- **Device control** - Home, volume, lock/unlock, orientation
-- **Apps** - Launch, terminate, switch apps
+- **Device control** - Home, volume, lock/unlock
+- **Apps** - Launch, terminate, switch
 - **Calls** - Answer/decline programmatically
-- **Keyboard** - Type text, dismiss keyboard
+- **Keyboard** - Type text, dismiss
 - **Clipboard** - Get/set clipboard
-- **Siri** - Trigger Siri commands
-- **Location** - Set simulated GPS
+- **Siri** - Trigger commands
+- **Location** - Simulated GPS
 - **Screenshots** - Capture and download
-- **Elements** - Find UI elements by name, xpath, etc.
+- **Elements** - Find by name, xpath, etc.
 
 ## Connection
 
-UDITA automatically detects:
-1. **USB** (preferred) - Reliable, no config needed
-2. **Wi-Fi** (fallback) - Works if on same network
+Auto-detects best method:
+1. **USB** (preferred) - Reliable, no config
+2. **Wi-Fi** (fallback) - Same network required
 
 ## API Examples
 
@@ -58,100 +81,110 @@ curl http://localhost:5050/api/status
 
 # Tap
 curl -X POST http://localhost:5050/api/tap \
-  -H "Content-Type: application/json" \
-  -d '{"x": 195, "y": 426}'
+  -d '{"x": 195, "y": 426}' -H "Content-Type: application/json"
 
 # Swipe
 curl -X POST http://localhost:5050/api/swipe \
-  -H "Content-Type: application/json" \
-  -d '{"from": {"x": 195, "y": 600}, "to": {"x": 195, "y": 200}}'
+  -d '{"from": {"x": 195, "y": 600}, "to": {"x": 195, "y": 200}}' \
+  -H "Content-Type: application/json"
 
 # Launch app
 curl -X POST http://localhost:5050/api/launch \
-  -H "Content-Type: application/json" \
-  -d '{"bundle_id": "com.apple.mobilesafari"}'
-
-# Type text
-curl -X POST http://localhost:5050/api/type \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Hello World"}'
+  -d '{"bundle_id": "com.apple.mobilesafari"}' \
+  -H "Content-Type: application/json"
 
 # Screenshot
 curl http://localhost:5050/api/screenshot.png -o screenshot.png
 ```
 
-See full API in dashboard (Raw API section).
+Full API docs: http://localhost:5050 (Raw API section)
 
 ## Troubleshooting
 
 ### "No iPhone found"
-- **USB:** Connect iPhone, unlock, trust this Mac
-- **Wi-Fi:** Both devices must be on same network
+- USB: Connect, unlock, trust this Mac
+- Wi-Fi: Same network required
 
 ### "Device management settings" error
-1. Settings → General → VPN & Device Management
-2. Tap your developer certificate
-3. Tap "Trust"
+Settings → General → Device Management → Trust certificate
 
-### Port already in use
+### Port in use
 ```bash
-./start.sh stop
-./start.sh
+./udita stop
+./udita
 ```
 
 ### WDA keeps stopping
-Don't close WebDriverAgentRunner app on iPhone!
+Don't close WebDriverAgentRunner app on iPhone
 
-### Running from Xcode (Alternative)
-If you prefer Xcode:
-1. Open `wda/WebDriverAgent.xcodeproj`
-2. Select **WebDriverAgentRunner** scheme (not WebDriverAgentLib!)
-3. Select your iPhone as destination
-4. Press Cmd+U to run tests
-5. In terminal: `./start.sh` (skip build, just starts bridge)
+## Requirements
 
-## Configuration
+**Minimum:**
+- macOS with Xcode (from App Store)
+- iPhone with Developer Mode enabled
+  - iOS 16+: Settings → Privacy & Security → Developer Mode → ON
+  - Connect via USB, unlock, and trust this Mac
 
-```bash
-# Custom port
-PORT=8080 ./start.sh
+**Everything else auto-installs:**
+- ✓ Homebrew (if missing)
+- ✓ Python 3 (if missing)
+- ✓ pip3 (if missing)
+- ✓ tidevice or libimobiledevice (USB tools)
+- ✓ Flask, Flask-CORS, requests (Python packages)
 
-# Force Wi-Fi IP
-./start.sh 192.168.1.40
-```
+Zero manual installation needed!
 
 ## Project Structure
 
 ```
 UDITA/
-├── start.sh              # Main script (setup + start + stop)
-├── wda/                  # WebDriverAgent
+├── udita              # ONE script - everything in here!
+├── README.md          
+├── wda/               # WebDriverAgent
 └── bridge/
-    ├── server.py         # API server
-    └── dashboard.html    # Web UI
+    ├── server.py      # API server
+    └── dashboard.html # Web UI
 ```
 
-## Requirements
+## Configuration
 
-- macOS with Xcode installed
-- iPhone with Developer Mode enabled (iOS 17+: Settings → Privacy & Security → Developer Mode)
-- Python 3 (pre-installed on macOS)
+```bash
+# Custom port
+PORT=8080 ./udita
 
-Everything else installs automatically!
+# Force Wi-Fi IP
+./udita 192.168.1.40
+```
+
+## Advanced
+
+### Running from Xcode
+1. Open `wda/WebDriverAgent.xcodeproj`
+2. Select **WebDriverAgentRunner** scheme
+3. Select your iPhone
+4. Cmd+U to run
+5. Run `./udita` (skips build, starts bridge)
+
+### Manual Build
+```bash
+cd wda
+xcodebuild build-for-testing \
+  -project WebDriverAgent.xcodeproj \
+  -scheme WebDriverAgentRunner \
+  -destination "id=YOUR_UDID"
+```
 
 ## Known Issues
 
 ### macOS Sonoma+ CoreDevice Errors
-Give Xcode Full Disk Access:
-- System Settings → Privacy & Security → Full Disk Access → Add Xcode
+System Settings → Privacy & Security → Full Disk Access → Add Xcode
 
 ### iOS 17+ Developer Mode
-Enable in: Settings → Privacy & Security → Developer Mode
+Settings → Privacy & Security → Developer Mode → Enable
 
 ## Credits
 
-- **WebDriverAgent** - Facebook (Meta)
-- **UDITA** - Built for iOS automation
+WebDriverAgent by Facebook (Meta)
 
 ## License
 

@@ -1,0 +1,452 @@
+#!/bin/bash
+# UDITA - Universal Device Interface for Test Automation
+# ONE script to rule them all
+
+set -e
+
+UDITA_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$UDITA_ROOT"
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+# Animations
+SPINNER_FRAMES=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+DOTS_FRAMES=("⠁" "⠂" "⠄" "⡀" "⢀" "⠠" "⠐" "⠈")
+PULSE_FRAMES=("◐" "◓" "◑" "◒")
+
+animate_loading() {
+    local msg="$1"
+    local duration="${2:-2}"
+    local end=$((SECONDS + duration))
+    local i=0
+    
+    while [ $SECONDS -lt $end ]; do
+        printf "\r${CYAN}${SPINNER_FRAMES[$i]} ${msg}${NC}"
+        i=$(( (i + 1) % ${#SPINNER_FRAMES[@]} ))
+        sleep 0.1
+    done
+    printf "\r${GREEN}✓ ${msg}${NC}\n"
+}
+
+# Interactive menu
+show_menu() {
+    clear
+    
+    # Photon Logo (compact, matching actual logo style) + UDITA
+    echo -e "${MAGENTA}${BOLD}"
+    echo "       ▄▄▄▄                                           "
+    echo "      ██▀▀██                                          "
+    echo "      ██  ██ ██  ██  ████  █████  ████  ██ ██        "
+    echo "      █████  ██▄▄██ ██  ██  ██   ██  ██ ████         "
+    echo "      ██     ██  ██ ██  ██  ██   ██  ██ ██ ██    ${CYAN}║║  ${GREEN}██  ██ ██████  ██ █████  ███"
+    echo "      ██     ██  ██  ████   ██    ████  ██  ██   ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
+    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  █████"
+    echo "                                                 ${CYAN}║║  ${GREEN}██  ██ ██   ██ ██   ██  ██ ██"
+    echo "                                                 ${CYAN}║║  ${GREEN}██████ ██████  ██   ██  ██  ██"
+    echo -e "${NC}"
+    echo -e "${DIM}                    Universal Device Interface for Test Automation${NC}"
+    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    if [ -f .setup_done ]; then
+        echo -e "${GREEN}✓ Setup complete${NC}"
+        [ -n "$TEAM_ID" ] && echo -e "${DIM}  Team ID: $TEAM_ID${NC}"
+        [ -n "$DEVICE_UDID" ] && echo -e "${DIM}  Device: ${DEVICE_UDID:0:8}...${NC}"
+    else
+        echo -e "${YELLOW}⚠ Setup required${NC}"
+    fi
+    
+    echo ""
+    echo -e "${CYAN}Commands:${NC}"
+    echo -e "  ${BOLD}1${NC}) Start UDITA"
+    echo -e "  ${BOLD}2${NC}) Stop UDITA"
+    echo -e "  ${BOLD}3${NC}) Check Status"
+    echo -e "  ${BOLD}4${NC}) Setup/Reconfigure"
+    echo -e "  ${BOLD}q${NC}) Quit"
+    echo ""
+    echo -ne "${CYAN}Select option [1-4, q]:${NC} "
+}
+
+interactive_mode() {
+    TEAM_ID=$(cat .setup_done 2>/dev/null || echo "")
+    DEVICE_UDID=$(get_device_udid)
+    
+    while true; do
+        show_menu
+        read -r choice
+        
+        case $choice in
+            1)
+                echo ""
+                start_services
+                echo ""
+                echo -e "${DIM}Press Enter to continue...${NC}"
+                read -r
+                ;;
+            2)
+                echo ""
+                stop_services
+                echo ""
+                echo -e "${DIM}Press Enter to continue...${NC}"
+                read -r
+                ;;
+            3)
+                echo ""
+                check_status
+                echo ""
+                echo -e "${DIM}Press Enter to continue...${NC}"
+                read -r
+                ;;
+            4)
+                echo ""
+                run_setup
+                TEAM_ID=$(cat .setup_done 2>/dev/null || echo "")
+                echo ""
+                echo -e "${DIM}Press Enter to continue...${NC}"
+                read -r
+                ;;
+            q|Q)
+                echo ""
+                echo -e "${GREEN}Goodbye!${NC}"
+                exit 0
+                ;;
+            *)
+                echo ""
+                echo -e "${RED}Invalid option${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+show_help() {
+    echo -e "${GREEN}${BOLD}UDITA - iPhone Remote Control${NC}"
+    echo ""
+    echo "Usage: ./udita [command]"
+    echo ""
+    echo "Commands:"
+    echo "  (none)   Interactive menu (default)"
+    echo "  start    Start UDITA"
+    echo "  stop     Stop all services"
+    echo "  status   Check service status"
+    echo "  setup    Run/rerun setup"
+    echo "  help     Show this help"
+    echo ""
+    echo "First run: ./udita"
+}
+
+stop_services() {
+    echo ""
+    animate_loading "Stopping services" 1
+    pkill -f "xcodebuild.*WebDriverAgent" 2>/dev/null || true
+    pkill -f "tidevice relay" 2>/dev/null || true
+    pkill -f "iproxy 8100" 2>/dev/null || true
+    pkill -f "bridge/server.py" 2>/dev/null || true
+    lsof -t -i :8100 2>/dev/null | xargs kill -9 2>/dev/null || true
+    lsof -t -i :5050 2>/dev/null | xargs kill -9 2>/dev/null || true
+    rm -f .*.pid
+    echo -e "${GREEN}✓ All services stopped${NC}"
+}
+
+auto_detect_team_id() {
+    local team_id=""
+    team_id=$(security find-identity -v -p codesigning 2>/dev/null | grep "iPhone Developer" | head -1 | grep -o "([A-Z0-9]\{10\})" | tr -d "()")
+    [ -z "$team_id" ] && [ -f .setup_done ] && team_id=$(cat .setup_done)
+    echo "$team_id"
+}
+
+get_device_udid() {
+    local udid=""
+    if command -v tidevice &>/dev/null; then
+        udid=$(tidevice list 2>/dev/null | grep -v "UDID" | tail -1 | awk '{print $1}')
+    elif command -v idevice_id &>/dev/null; then
+        udid=$(idevice_id -l 2>/dev/null | head -1)
+    fi
+    echo "$udid"
+}
+
+test_wda() {
+    curl -s --connect-timeout 2 "http://$1:8100/status" 2>/dev/null | grep -q '"ready"'
+}
+
+check_and_install_dependencies() {
+    animate_loading "Checking dependencies" 1
+    
+    # Check Xcode
+    if ! command -v xcodebuild &>/dev/null; then
+        echo -e "${RED}Error: Xcode not installed${NC}"
+        echo "Install from: https://apps.apple.com/app/xcode/id497799835"
+        exit 1
+    fi
+    
+    if ! command -v brew &>/dev/null; then
+        echo -e "${YELLOW}${PULSE_FRAMES[0]} Installing Homebrew...${NC}"
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || {
+            echo -e "${YELLOW}Homebrew installation skipped (optional)${NC}"
+        }
+        
+        # Add brew to PATH for this session
+        if [ -f /opt/homebrew/bin/brew ]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [ -f /usr/local/bin/brew ]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+    fi
+    
+    if ! command -v python3 &>/dev/null; then
+        animate_loading "Installing Python3" 2
+        if command -v brew &>/dev/null; then
+            brew install python3
+        else
+            echo -e "${RED}Error: Python3 not found${NC}"
+            echo "Install Homebrew: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\""
+            exit 1
+        fi
+    fi
+    
+    if ! command -v pip3 &>/dev/null; then
+        animate_loading "Installing pip3" 2
+        python3 -m ensurepip --upgrade 2>/dev/null || {
+            curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
+            python3 /tmp/get-pip.py
+            rm /tmp/get-pip.py
+        }
+    fi
+    
+    if ! command -v tidevice &>/dev/null && ! command -v iproxy &>/dev/null; then
+        animate_loading "Installing USB tools (tidevice)" 3
+        pip3 install -q tidevice 2>/dev/null || pip3 install --user -q tidevice || {
+            echo -e "${YELLOW}Trying iproxy instead...${NC}"
+            if command -v brew &>/dev/null; then
+                brew install libimobiledevice
+            else
+                echo -e "${RED}Failed to install USB tools${NC}"
+                echo "Install manually: pip3 install tidevice"
+                echo "Or: brew install libimobiledevice"
+            fi
+        }
+    fi
+    
+    # Install Python packages
+    local missing_packages=()
+    python3 -c "import flask" 2>/dev/null || missing_packages+=("flask")
+    python3 -c "import flask_cors" 2>/dev/null || missing_packages+=("flask-cors")
+    python3 -c "import requests" 2>/dev/null || missing_packages+=("requests")
+    
+    if [ ${#missing_packages[@]} -gt 0 ]; then
+        animate_loading "Installing Python packages (${missing_packages[*]})" 2
+        pip3 install -q "${missing_packages[@]}" 2>/dev/null || \
+        pip3 install --user -q "${missing_packages[@]}" || {
+            echo -e "${RED}Failed to install Python packages${NC}"
+            echo "Install manually: pip3 install ${missing_packages[*]}"
+            exit 1
+        }
+    fi
+    
+    echo -e "${GREEN}✓ All dependencies installed${NC}"
+}
+
+run_setup() {
+    clear
+    echo -e "${MAGENTA}${BOLD}"
+    echo "       ▄▄▄▄                                           "
+    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA Setup${MAGENTA}"
+    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${DIM}Configuration Wizard${MAGENTA}"
+    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
+    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
+    echo -e "${NC}"
+    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    check_and_install_dependencies
+    echo ""
+    
+    # Get Team ID
+    TEAM_ID=$(auto_detect_team_id)
+    
+    if [ -n "$TEAM_ID" ]; then
+        echo -e "${GREEN}Auto-detected Team ID: $TEAM_ID${NC}"
+    else
+        echo "Enter Apple Developer Team ID"
+        echo "(Xcode → Settings → Accounts)"
+        read -p "Team ID: " TEAM_ID
+    fi
+    
+    [ -z "$TEAM_ID" ] && { echo -e "${RED}Team ID required${NC}"; exit 1; }
+    
+    # Get device
+    UDID=$(get_device_udid)
+    [ -z "$UDID" ] && { echo -e "${RED}No iPhone found${NC}"; exit 1; }
+    
+    echo -e "${GREEN}Device: $UDID${NC}"
+    
+    animate_loading "Configuring Xcode project" 1
+    sed -i '' "s/DEVELOPMENT_TEAM = [^;]*/DEVELOPMENT_TEAM = $TEAM_ID/g" wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    # Generate unique bundle IDs
+    BUNDLE_SUFFIX=$(echo $TEAM_ID | md5 | cut -c1-8)
+    sed -i '' "s/com\.vanditkumar\./com.wda.$BUNDLE_SUFFIX./g" wda/WebDriverAgent.xcodeproj/project.pbxproj
+    sed -i '' "s/com\.facebook\./com.wda.$BUNDLE_SUFFIX./g" wda/WebDriverAgent.xcodeproj/project.pbxproj
+    
+    echo ""
+    echo -e "${CYAN}${SPINNER_FRAMES[0]} Building WebDriverAgent...${NC}"
+    cd wda
+    xcodebuild build-for-testing \
+      -project WebDriverAgent.xcodeproj \
+      -scheme WebDriverAgentRunner \
+      -destination "id=$UDID" \
+      -allowProvisioningUpdates > /dev/null 2>&1
+    
+    cd ..
+    echo "$TEAM_ID" > .setup_done
+    
+    echo ""
+    echo -e "${GREEN}✓ Setup complete!${NC}"
+    echo ""
+    echo "IMPORTANT: Trust certificate on iPhone"
+    echo "Settings → General → Device Management"
+    echo ""
+}
+
+start_services() {
+    if [ ! -f .setup_done ]; then
+        run_setup
+    else
+        if ! command -v python3 &>/dev/null || ! python3 -c "import flask" 2>/dev/null; then
+            echo -e "${YELLOW}Dependencies missing, running setup...${NC}"
+            run_setup
+        fi
+    fi
+    
+    clear
+    echo -e "${MAGENTA}${BOLD}"
+    echo "       ▄▄▄▄                                           "
+    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA${MAGENTA}"
+    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${YELLOW}Starting Services...${MAGENTA}"
+    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
+    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
+    echo -e "${NC}"
+    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    
+    UDID=$(get_device_udid)
+    [ -z "$UDID" ] && { echo -e "${RED}No iPhone found${NC}"; exit 1; }
+    
+    echo -e "${GREEN}Device: $UDID${NC}"
+    
+    pkill -f "xcodebuild.*WebDriverAgent" 2>/dev/null || true
+    
+    animate_loading "Starting WebDriverAgent" 2
+    cd wda
+    nohup xcodebuild test-without-building \
+      -project WebDriverAgent.xcodeproj \
+      -scheme WebDriverAgentRunner \
+      -destination "id=$UDID" \
+      -allowProvisioningUpdates > /dev/null 2>&1 &
+    cd ..
+    sleep 5
+    
+    WDA_HOST=""
+    echo ""
+    animate_loading "Establishing connection" 2
+    
+    if command -v tidevice &>/dev/null; then
+        nohup tidevice relay 8100 8100 > /dev/null 2>&1 &
+        sleep 2
+        test_wda "127.0.0.1" && WDA_HOST="127.0.0.1" && CONN="USB"
+    elif command -v iproxy &>/dev/null; then
+        nohup iproxy 8100 8100 > /dev/null 2>&1 &
+        sleep 2
+        test_wda "127.0.0.1" && WDA_HOST="127.0.0.1" && CONN="USB"
+    fi
+    
+    if [ -z "$WDA_HOST" ]; then
+        animate_loading "Scanning Wi-Fi network" 3
+        SUBNET=$(ifconfig | grep "inet " | grep -v "127.0.0.1" | head -1 | awk '{print $2}' | sed 's/\.[0-9]*$//')
+        for i in {1..254}; do
+            ip="${SUBNET}.$i"
+            test_wda "$ip" 2>/dev/null && { WDA_HOST="$ip"; CONN="Wi-Fi"; break; }
+        done
+    fi
+    
+    [ -z "$WDA_HOST" ] && { echo -e "${RED}Could not connect to WDA${NC}"; exit 1; }
+    
+    echo -e "${GREEN}✓ Connected via $CONN ($WDA_HOST:8100)${NC}"
+    
+    echo ""
+    animate_loading "Starting bridge server" 1
+    cd bridge
+    nohup python3 server.py --ip "$WDA_HOST" --port 5050 > /dev/null 2>&1 &
+    cd ..
+    sleep 2
+    
+    clear
+    echo -e "${MAGENTA}${BOLD}"
+    echo "       ▄▄▄▄                                           "
+    echo "      ██▀▀██  ██  ██  ████  █████  ████  ██ ██   ${CYAN}║║  ${GREEN}UDITA${MAGENTA}"
+    echo "      █████   ██▄▄██ ██  ██  ██   ██  ██ ████    ${CYAN}║║  ${GREEN}✓ Services Running${MAGENTA}"
+    echo "      ██      ██  ██ ██  ██  ██   ██  ██ ██ ██   ${CYAN}║║${MAGENTA}"
+    echo "      ██      ██  ██  ████   ██    ████  ██  ██  ${CYAN}║║${MAGENTA}"
+    echo -e "${NC}"
+    echo -e "${CYAN}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${GREEN}${BOLD}  ✓ WebDriverAgent:${NC} Running on $WDA_HOST:8100"
+    echo -e "${GREEN}${BOLD}  ✓ Bridge Server:${NC}   http://localhost:5050"
+    echo -e "${GREEN}${BOLD}  ✓ Connection:${NC}      $CONN"
+    echo ""
+    echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}  Dashboard:${NC} ${BLUE}http://localhost:5050${NC}"
+    echo -e "${CYAN}  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${DIM}  Controls: Click=tap | Drag=swipe | Hold=long-press${NC}"
+    echo ""
+    echo -e "${YELLOW}  Stop services: ./udita stop${NC}"
+    echo ""
+}
+
+check_status() {
+    if curl -s --connect-timeout 2 "http://127.0.0.1:5050/api/status" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ UDITA is running${NC}"
+        echo "Dashboard: http://localhost:5050"
+    else
+        echo -e "${YELLOW}✗ UDITA is not running${NC}"
+        echo "Start: ./udita start"
+    fi
+}
+
+
+# Main
+case "${1:-menu}" in
+    menu|"")
+        interactive_mode
+        ;;
+    start)
+        start_services
+        ;;
+    stop)
+        stop_services
+        ;;
+    status)
+        check_status
+        ;;
+    setup)
+        run_setup
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

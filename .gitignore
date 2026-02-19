@@ -27,11 +27,9 @@ xcuserdata/
 *.dSYM
 
 # UDITA runtime
-.bridge.pid
-.relay.pid
 .setup_done
-.wda.pid
 *.log
+*.pid
 nohup.out
 
 # IDE
