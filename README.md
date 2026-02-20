@@ -4,8 +4,6 @@
 
 UDITA is a multi-device iOS automation system that enables remote control of multiple iPhones from a Mac via WebDriverAgent (WDA). It provides a web-based dashboard for controlling iOS devices over Wi-Fi, with automatic device discovery and session management.
 
-![Logo](logo.png)
-
 ## Features
 
 - **Multi-device support:** Control multiple iPhones simultaneously from a single dashboard
