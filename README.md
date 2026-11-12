@@ -98,7 +98,7 @@ UDITA/
 │   ├── WebDriverAgent.xcodeproj
 │   └── README.md      # WDA documentation
 ├── logo.png           # Project logo
-└── LICENSE            # MIT License
+└── LICENSE            # Apache-2.0 License
 ```
 
 ## How It Works
@@ -167,7 +167,7 @@ See `wda/README.md` and `wda/BUILD_INSTRUCTIONS.md` for detailed instructions.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 Copyright (c) 2025 photon-hq
 
